@@ -1,2 +1,3 @@
 rootProject.name = 'InfinimumDB-Client'
 
+includeBuild "./infinileap"
