@@ -65,7 +65,7 @@ public class InfinimumDBClient {
         NativeLogger.enable();
         log.info("Using UCX version {}", Context.getVersion());
         try (resources) {
-            initialize(serverAddress);
+            initialize();
             sendPutMessage(key, object);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
@@ -79,9 +79,7 @@ public class InfinimumDBClient {
         scope.close();
     }
 
-    private void initialize(InetSocketAddress serverAddress) throws ControlException, InterruptedException {
-        this.serverAddress = serverAddress;
-
+    private void initialize() throws ControlException, InterruptedException {
         // Create context parameters
         var contextParameters = new ContextParameters()
                 .setFeatures(FEATURE_SET)
@@ -110,9 +108,9 @@ public class InfinimumDBClient {
         );
 
         var endpointParameters = new EndpointParameters()
-                .setRemoteAddress(serverAddress);
+                .setRemoteAddress(this.serverAddress);
 
-        log.info("Connecting to {}", serverAddress);
+        log.info("Connecting to {}", this.serverAddress);
         this.endpoint = worker.createEndpoint(endpointParameters);
     }
 
@@ -123,9 +121,9 @@ public class InfinimumDBClient {
 
         // Create memory segment and fill it with data
         final var source = MemorySegment.ofArray(objectBytes);
-        final var memoryRegion = context.allocateMemory(dataSize);
+        final var memoryRegion = this.context.allocateMemory(dataSize);
         memoryRegion.segment().copyFrom(source);
-        String dataAddress = memoryRegion.descriptor().toString();
+        String dataAddress = memoryRegion.descriptor().remoteAddress().toString();
 
         String operationName = "PUT";
 
@@ -142,7 +140,7 @@ public class InfinimumDBClient {
         data.setUtf8String(0L, dataString);
 
         // Invoke remote handler
-        Requests.await(worker, endpoint.sendActive(IDENTIFIER, header, data, new RequestParameters()
+        Requests.await(this.worker, this.endpoint.sendActive(IDENTIFIER, header, data, new RequestParameters()
                 .setDataType(DataType.CONTIGUOUS_8_BIT)));
 
         // Wait until remote signals completion
