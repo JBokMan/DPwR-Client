@@ -28,6 +28,9 @@ dependencies {
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.8.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.8.2'
 
+    // https://mvnrepository.com/artifact/org.springframework/spring-core
+    implementation group: 'org.springframework', name: 'spring-core', version: '5.3.15'
+
     // https://mvnrepository.com/artifact/redis.clients/jedis
     implementation group: 'redis.clients', name: 'jedis', version: '4.0.1'
 
