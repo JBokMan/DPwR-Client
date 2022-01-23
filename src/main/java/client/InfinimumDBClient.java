@@ -8,10 +8,9 @@ import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.util.SerializationUtils;
+import org.apache.commons.lang3.SerializationUtils;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisConnectionException;
-import utils.PutData;
 
 import java.io.Serializable;
 import java.net.ConnectException;
@@ -24,12 +23,11 @@ public class InfinimumDBClient {
     private Context context;
     private final ResourceScope scope = ResourceScope.newSharedScope();
     private final ResourcePool resources = new ResourcePool();
-    private final CommunicationBarrier barrier = new CommunicationBarrier();
-    private InetSocketAddress serverAddress;
+    private final InetSocketAddress serverAddress;
     private Worker worker;
     private Endpoint endpoint;
+    private final CommunicationBarrier barrier = new CommunicationBarrier();
 
-    private static final Identifier IDENTIFIER = new Identifier(0x01);
     private static final long DEFAULT_REQUEST_SIZE = 1024;
     private static final ContextParameters.Feature[] FEATURE_SET = {
             ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.WAKEUP, ContextParameters.Feature.AM,
@@ -66,7 +64,7 @@ public class InfinimumDBClient {
         log.info("Using UCX version {}", Context.getVersion());
         try (resources) {
             initialize();
-            sendPutMessage(key, object);
+            putOperation(key, object, context);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
         } catch (CloseException e) {
@@ -114,43 +112,74 @@ public class InfinimumDBClient {
         this.endpoint = worker.createEndpoint(endpointParameters);
     }
 
-    public void sendPutMessage(String key, Serializable object) throws ControlException, InterruptedException {
+    public void putOperation(String key, Serializable object, Context context) {
         byte[] objectBytes = SerializationUtils.serialize(object);
         assert objectBytes != null;
         int dataSize = objectBytes.length;
 
+        sendMessage("PUT");
+
         // Create memory segment and fill it with data
         final var source = MemorySegment.ofArray(objectBytes);
-        final var memoryRegion = this.context.allocateMemory(dataSize);
+        MemoryRegion memoryRegion = null;
+        try {
+            memoryRegion = context.allocateMemory(dataSize);
+        } catch (ControlException e) {
+            e.printStackTrace();
+        }
+        if (memoryRegion == null) {
+            log.error("Memory region was null");
+            return;
+        }
         memoryRegion.segment().copyFrom(source);
-        String dataAddress = memoryRegion.descriptor().remoteAddress().toString();
+        final var descriptor = memoryRegion.descriptor();
 
-        String operationName = "PUT";
+        sendRemoteKey(descriptor);
 
-        int sizeOfOperationName = operationName.getBytes().length + 1;
-        String dataString = new PutData(dataSize, dataAddress).toString();
-        int sizeOfDataString = dataString.getBytes().length + 1;
+        waitUntilRemoteSignalsCompletion();
 
-        // Create header and data segments
-        final var header = MemorySegment.allocateNative(sizeOfOperationName, scope);
-        final var data = MemorySegment.allocateNative(sizeOfDataString, scope);
+        log.info("Put completed");
+    }
 
-        // Set data within segments
-        header.setUtf8String(0L, operationName);
-        data.setUtf8String(0L, dataString);
+    private void sendMessage(String message) {
+        log.info("Sending message");
+        byte[] messageBytes = SerializationUtils.serialize(message);
+        assert messageBytes != null;
+        int messageSize = messageBytes.length;
 
-        // Invoke remote handler
-        Requests.await(this.worker, this.endpoint.sendActive(IDENTIFIER, header, data, new RequestParameters()
-                .setDataType(DataType.CONTIGUOUS_8_BIT)));
+        // Allocate a buffer and write the message
+        final var source = MemorySegment.ofArray(messageBytes);
+        final var buffer = MemorySegment.allocateNative(messageSize, scope);
+        buffer.copyFrom(source);
 
-        // Wait until remote signals completion
+        var request = endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters()
+                .setSendCallback(barrier::release));
+
+        try {
+            Requests.await(worker, barrier);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+        Requests.release(request);
+    }
+
+    private void sendRemoteKey(MemoryDescriptor descriptor) {
+        log.info("Sending remote key");
+        endpoint.sendTagged(descriptor, Tag.of(0L), new RequestParameters().setSendCallback(barrier::release));
+    }
+
+    private void waitUntilRemoteSignalsCompletion() {
+        log.info("Wait until remote signals completion");
         final var completion = MemorySegment.allocateNative(Byte.BYTES, scope);
 
-
-        var request = worker.receiveTagged(completion, Tag.of(0L), new RequestParameters()
+        long request = worker.receiveTagged(completion, Tag.of(0L), new RequestParameters()
                 .setReceiveCallback(barrier::release));
 
-        Requests.await(worker, barrier);
+        try {
+            Requests.await(worker, barrier);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         Requests.release(request);
     }
 
