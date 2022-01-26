@@ -15,6 +15,9 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 
 @Slf4j
 public class InfinimumDBClient {
@@ -72,6 +75,11 @@ public class InfinimumDBClient {
         } catch (InterruptedException e) {
             log.error("Unexpected interrupt occurred", e);
         }
+        try {
+            resources.close();
+        } catch (CloseException e) {
+            e.printStackTrace();
+        }
 
         // Release resource scope
         scope.close();
@@ -117,7 +125,9 @@ public class InfinimumDBClient {
         assert objectBytes != null;
         int dataSize = objectBytes.length;
 
-        sendMessage("PUT");
+        byte[] messageBytes = SerializationUtils.serialize("PUT");
+        assert messageBytes != null;
+        sendData(messageBytes);
 
         // Create memory segment and fill it with data
         final var source = MemorySegment.ofArray(objectBytes);
@@ -134,6 +144,16 @@ public class InfinimumDBClient {
         memoryRegion.segment().copyFrom(source);
         final var descriptor = memoryRegion.descriptor();
 
+        MessageDigest md = null;
+        try {
+            md = MessageDigest.getInstance("MD5");
+        } catch (NoSuchAlgorithmException e) {
+            e.printStackTrace();
+        }
+        assert md != null;
+        byte[] result = md.digest(key.getBytes(StandardCharsets.UTF_8));
+        sendData(result);
+
         sendRemoteKey(descriptor);
 
         waitUntilRemoteSignalsCompletion();
@@ -141,31 +161,32 @@ public class InfinimumDBClient {
         log.info("Put completed");
     }
 
-    private void sendMessage(String message) {
-        log.info("Sending message");
-        byte[] messageBytes = SerializationUtils.serialize(message);
-        assert messageBytes != null;
-        int messageSize = messageBytes.length;
+    private void sendData(byte[] data) {
+        log.info("Sending data");
+        int dataSize = data.length;
+        System.out.println(dataSize);
 
         // Allocate a buffer and write the message
-        final var source = MemorySegment.ofArray(messageBytes);
-        final var buffer = MemorySegment.allocateNative(messageSize, scope);
+        final var source = MemorySegment.ofArray(data);
+        final var buffer = MemorySegment.allocateNative(dataSize, scope);
         buffer.copyFrom(source);
 
-        var request = endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters()
+        var request = endpoint.sendTagged(buffer, Tag.of(1L), new RequestParameters()
                 .setSendCallback(barrier::release));
 
-        try {
-            Requests.await(worker, barrier);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        //Requests.await(worker, barrier);
         Requests.release(request);
     }
 
     private void sendRemoteKey(MemoryDescriptor descriptor) {
         log.info("Sending remote key");
+        // ToDo this is weird, why no wait
         endpoint.sendTagged(descriptor, Tag.of(0L), new RequestParameters().setSendCallback(barrier::release));
+        try {
+            Requests.await(worker, barrier);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     private void waitUntilRemoteSignalsCompletion() {
