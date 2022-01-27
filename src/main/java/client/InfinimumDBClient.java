@@ -134,6 +134,10 @@ public class InfinimumDBClient {
         }
 
         final MemoryDescriptor objectAddress = getMemoryDescriptorOfBytes(objectBytes, context);
+        if (objectAddress == null) {
+            log.warn("An exception occurred getting the objects memory address, aborting PUT operation");
+            return;
+        }
 
         ArrayList<Long> requests = new ArrayList<>();
         requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), endpoint, barrier, scope));
