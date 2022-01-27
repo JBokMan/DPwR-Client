@@ -3,10 +3,8 @@ package client;
 
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
-import de.hhu.bsinfo.infinileap.example.util.Requests;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
-import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationUtils;
@@ -16,6 +14,7 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 
 import static client.CommunicationUtils.*;
@@ -140,32 +139,21 @@ public class InfinimumDBClient {
         }
 
         ArrayList<Long> requests = new ArrayList<>();
-        requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), endpoint, barrier, scope));
-        requests.add(prepareToSendData(objectID, endpoint, barrier, scope));
+        requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), 0L, endpoint, barrier, scope));
+        requests.add(prepareToSendData(objectID, 0L, endpoint, barrier, scope));
         requests.add(prepareToSendRemoteKey(objectAddress, endpoint, barrier));
 
         sendData(requests, worker, barrier);
 
-        waitUntilRemoteSignalsCompletion();
+        String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, barrier, scope));
+        log.info("Received \"{}\"", statusCode);
 
-        log.info("Put completed");
-    }
-
-    private void waitUntilRemoteSignalsCompletion() {
-        log.info("Wait until remote signals completion");
-        final var completion = MemorySegment.allocateNative(Byte.BYTES, scope);
-
-        long request = worker.receiveTagged(completion, Tag.of(0L), new RequestParameters()
-                .setReceiveCallback(barrier::release));
-
-        try {
-            Requests.await(worker, barrier);
-        } catch (InterruptedException e) {
-            if (log.isErrorEnabled()) {
-                log.error(e.getMessage());
-            }
+        if ("200".equals(statusCode)) {
+            Integer serverID = SerializationUtils.deserialize(receiveData(81, 0L, worker, barrier, scope));
+            log.info("Received \"{}\"", serverID);
+            jedisClient.getResource().set(key.getBytes(StandardCharsets.UTF_8), new byte[]{serverID.byteValue()});
+            log.info("Put completed");
         }
-        Requests.release(request);
     }
 
     protected <T extends AutoCloseable> T pushResource(T resource) {

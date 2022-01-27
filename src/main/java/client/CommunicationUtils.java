@@ -40,7 +40,7 @@ public class CommunicationUtils {
         }
     }
 
-    public static long prepareToSendData(final byte[] data, final Endpoint endpoint, final CommunicationBarrier barrier, final ResourceScope scope) {
+    public static long prepareToSendData(final byte[] data, final long tagID, final Endpoint endpoint, final CommunicationBarrier barrier, final ResourceScope scope) {
         log.info("Prepare to send data");
         final int dataSize = data.length;
 
@@ -48,7 +48,7 @@ public class CommunicationUtils {
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
         buffer.copyFrom(source);
 
-        return endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters()
+        return endpoint.sendTagged(buffer, Tag.of(tagID), new RequestParameters()
                 .setSendCallback(barrier::release));
     }
 
