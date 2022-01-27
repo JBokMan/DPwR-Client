@@ -1,5 +1,6 @@
 package client;
 
+
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
 import de.hhu.bsinfo.infinileap.example.util.Requests;
@@ -15,9 +16,6 @@ import redis.clients.jedis.exceptions.JedisConnectionException;
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 
 import static client.CommunicationUtils.*;
@@ -25,14 +23,14 @@ import static client.CommunicationUtils.*;
 @Slf4j
 public class InfinimumDBClient {
 
-    private final JedisPool jedisClient;
-    private Context context;
-    private final ResourceScope scope = ResourceScope.newSharedScope();
-    private final ResourcePool resources = new ResourcePool();
-    private final InetSocketAddress serverAddress;
-    private Worker worker;
-    private Endpoint endpoint;
-    private final CommunicationBarrier barrier = new CommunicationBarrier();
+    private transient final JedisPool jedisClient;
+    private transient Context context;
+    private transient final ResourceScope scope = ResourceScope.newSharedScope();
+    private transient final ResourcePool resources = new ResourcePool();
+    private transient final InetSocketAddress serverAddress;
+    private transient Worker worker;
+    private transient Endpoint endpoint;
+    private transient final CommunicationBarrier barrier = new CommunicationBarrier();
 
     private static final long DEFAULT_REQUEST_SIZE = 1024;
     private static final ContextParameters.Feature[] FEATURE_SET = {
@@ -46,14 +44,14 @@ public class InfinimumDBClient {
         try {
             testServerConnection();
         } catch (ConnectException e) {
-            System.err.println("InfinimumDB-Server could not be reached");
+            log.error("InfinimumDB-Server could not be reached");
         }
 
         this.jedisClient = new JedisPool(redisHostAddress, redisPort);
         try {
             this.jedisClient.getResource();
         } catch (JedisConnectionException e) {
-            System.err.println("Redis could not be reached");
+            log.error("Redis could not be reached");
         }
     }
 
@@ -67,7 +65,9 @@ public class InfinimumDBClient {
 
     public void put(String key, Serializable object) {
         NativeLogger.enable();
-        log.info("Using UCX version {}", Context.getVersion());
+        if (log.isInfoEnabled()) {
+            log.info("Using UCX version {}", Context.getVersion());
+        }
         try (resources) {
             initialize();
             putOperation(key, object, context);
@@ -120,24 +120,25 @@ public class InfinimumDBClient {
 
     public void putOperation(String key, Serializable object, Context context) {
         log.info("Starting PUT operation");
-        ArrayList<Long> requests = new ArrayList<>();
 
-        //check if object is serializable
-        byte[] objectBytes = SerializationUtils.serialize(object);
-        if (objectBytes == null) {
-            log.warn("Object was not serializable, aborting PUT operation");
+        byte[] objectBytes = serializeObject(object);
+        if (objectBytes.length == 0) {
+            log.warn("Object was not serializable or empty, aborting PUT operation");
             return;
         }
 
-        byte[] messageBytes = SerializationUtils.serialize("PUT");
-        requests.add(prepareToSendData(messageBytes, endpoint, barrier, scope));
-
-        final var descriptor = getMemoryDescriptorOfBytes(objectBytes, context);
-
         byte[] objectID = getMD5Hash(key);
-        requests.add(prepareToSendData(objectID, endpoint, barrier, scope));
+        if (objectID.length == 0) {
+            log.warn("An exception occurred while hashing the key, aborting PUT operation");
+            return;
+        }
 
-        requests.add(prepareToSendRemoteKey(descriptor, endpoint, barrier));
+        final MemoryDescriptor objectAddress = getMemoryDescriptorOfBytes(objectBytes, context);
+
+        ArrayList<Long> requests = new ArrayList<>();
+        requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), endpoint, barrier, scope));
+        requests.add(prepareToSendData(objectID, endpoint, barrier, scope));
+        requests.add(prepareToSendRemoteKey(objectAddress, endpoint, barrier));
 
         sendData(requests, worker, barrier);
 
@@ -156,7 +157,9 @@ public class InfinimumDBClient {
         try {
             Requests.await(worker, barrier);
         } catch (InterruptedException e) {
-            e.printStackTrace();
+            if (log.isErrorEnabled()) {
+                log.error(e.getMessage());
+            }
         }
         Requests.release(request);
     }
