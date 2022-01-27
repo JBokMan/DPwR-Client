@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'idea'
+    id 'pmd'
 
     // jextract Plugin
     id 'io.github.krakowski.jextract' version '0.2.3'
