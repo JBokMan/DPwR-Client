@@ -120,40 +120,22 @@ public class InfinimumDBClient {
 
     public void putOperation(String key, Serializable object, Context context) {
         log.info("Starting PUT operation");
-        byte[] objectBytes = SerializationUtils.serialize(object);
-        assert objectBytes != null;
-        int dataSize = objectBytes.length;
-
         ArrayList<Long> requests = new ArrayList<>();
 
-        byte[] messageBytes = SerializationUtils.serialize("PUT");
-        assert messageBytes != null;
-        requests.add(prepareToSendData(messageBytes, endpoint, barrier, scope));
-
-        // Create memory segment and fill it with data
-        final var source = MemorySegment.ofArray(objectBytes);
-        MemoryRegion memoryRegion = null;
-        try {
-            memoryRegion = context.allocateMemory(dataSize);
-        } catch (ControlException e) {
-            e.printStackTrace();
-        }
-        if (memoryRegion == null) {
-            log.error("Memory region was null");
+        //check if object is serializable
+        byte[] objectBytes = SerializationUtils.serialize(object);
+        if (objectBytes == null) {
+            log.warn("Object was not serializable, aborting PUT operation");
             return;
         }
-        memoryRegion.segment().copyFrom(source);
-        final var descriptor = memoryRegion.descriptor();
 
-        MessageDigest md = null;
-        try {
-            md = MessageDigest.getInstance("MD5");
-        } catch (NoSuchAlgorithmException e) {
-            e.printStackTrace();
-        }
-        assert md != null;
-        byte[] result = md.digest(key.getBytes(StandardCharsets.UTF_8));
-        requests.add(prepareToSendData(result, endpoint, barrier, scope));
+        byte[] messageBytes = SerializationUtils.serialize("PUT");
+        requests.add(prepareToSendData(messageBytes, endpoint, barrier, scope));
+
+        final var descriptor = getMemoryDescriptorOfBytes(objectBytes, context);
+
+        byte[] objectID = getMD5Hash(key);
+        requests.add(prepareToSendData(objectID, endpoint, barrier, scope));
 
         requests.add(prepareToSendRemoteKey(descriptor, endpoint, barrier));
 
