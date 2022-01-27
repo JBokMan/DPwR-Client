@@ -8,6 +8,13 @@ plugins {
     id 'io.github.krakowski.jextract' version '0.2.3'
 }
 
+pmd {
+    consoleOutput = true
+    toolVersion = "6.41.0"
+    rulesMinimumPriority = 5
+    ruleSets = ["category/java/errorprone.xml", "category/java/bestpractices.xml"]
+}
+
 application {
     mainClass = 'App'
 }
