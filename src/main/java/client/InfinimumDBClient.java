@@ -2,13 +2,11 @@ package client;
 
 
 import de.hhu.bsinfo.infinileap.binding.*;
-import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationUtils;
-import org.apache.commons.lang3.tuple.Pair;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.exceptions.JedisConnectionException;
 
@@ -146,7 +144,7 @@ public class InfinimumDBClient {
             return;
         }
 
-        final ArrayList<Pair<Long, CommunicationBarrier>> requests = new ArrayList<>();
+        final ArrayList<Long> requests = new ArrayList<>();
         requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), 0L, endpoint, scope));
         requests.add(prepareToSendData(objectID, 0L, endpoint, scope));
         requests.add(prepareToSendRemoteKey(objectAddress, endpoint));
