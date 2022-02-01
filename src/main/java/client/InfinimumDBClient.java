@@ -6,14 +6,15 @@ import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 import redis.clients.jedis.JedisPool;
-import redis.clients.jedis.exceptions.JedisConnectionException;
 
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 
 import static client.CommunicationUtils.*;
@@ -35,7 +36,7 @@ public class InfinimumDBClient {
             ContextParameters.Feature.ATOMIC_32, ContextParameters.Feature.ATOMIC_64, ContextParameters.Feature.STREAM
     };
 
-    public InfinimumDBClient(String serverHostAddress, Integer serverPort, String redisHostAddress, Integer redisPort) {
+    public InfinimumDBClient(final String serverHostAddress, final Integer serverPort, final String redisHostAddress, final Integer redisPort) {
         this.serverAddress = new InetSocketAddress(serverHostAddress, serverPort);
         setupServerConnection(serverHostAddress, serverPort);
         try {
@@ -45,22 +46,18 @@ public class InfinimumDBClient {
         }
 
         this.jedisClient = new JedisPool(redisHostAddress, redisPort);
-        try {
-            this.jedisClient.getResource();
-        } catch (JedisConnectionException e) {
-            log.error("Redis could not be reached");
-        }
+        this.jedisClient.getResource();
     }
 
     private void testServerConnection() throws ConnectException {
         //TODO implement
     }
 
-    private void setupServerConnection(String serverHostAddress, Integer serverPort) {
+    private void setupServerConnection(final String serverHostAddress, final Integer serverPort) {
         //TODO implement
     }
 
-    public void put(String key, Serializable object) {
+    public void put(final String key, final Serializable object) {
         NativeLogger.enable();
         if (log.isInfoEnabled()) {
             log.info("Using UCX version {}", Context.getVersion());
@@ -74,6 +71,8 @@ public class InfinimumDBClient {
             log.error("Closing resource failed", e);
         } catch (InterruptedException e) {
             log.error("Unexpected interrupt occurred", e);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("Hashing algorithm was not found", e);
         }
 
         // Release resource scope
@@ -82,12 +81,12 @@ public class InfinimumDBClient {
 
     private void initialize() throws ControlException, InterruptedException {
         // Create context parameters
-        var contextParameters = new ContextParameters()
+        final ContextParameters contextParameters = new ContextParameters()
                 .setFeatures(FEATURE_SET)
                 .setRequestSize(DEFAULT_REQUEST_SIZE);
 
         // Read configuration (Environment Variables)
-        var configuration = pushResource(
+        final Configuration configuration = pushResource(
                 Configuration.read()
         );
 
@@ -98,7 +97,7 @@ public class InfinimumDBClient {
                 Context.initialize(contextParameters, configuration)
         );
 
-        var workerParameters = new WorkerParameters()
+        final WorkerParameters workerParameters = new WorkerParameters()
                 .setThreadMode(ThreadMode.SINGLE);
 
         log.info("Creating worker");
@@ -108,40 +107,47 @@ public class InfinimumDBClient {
                 context.createWorker(workerParameters)
         );
 
-        var endpointParameters = new EndpointParameters()
+        final EndpointParameters endpointParams = new EndpointParameters()
                 .setRemoteAddress(this.serverAddress);
 
         log.info("Connecting to {}", this.serverAddress);
-        this.endpoint = worker.createEndpoint(endpointParameters);
+        this.endpoint = worker.createEndpoint(endpointParams);
     }
 
-    public void putOperation(String key, Serializable object, Context context) {
+    public void putOperation(final String key, final Serializable object, final Context context) throws SerializationException, NoSuchAlgorithmException, ControlException {
         if (log.isInfoEnabled()) {
             log.info("Starting PUT operation");
         }
 
-        final byte[] objectBytes = serializeObject(object);
-        if (objectBytes.length == 0) {
-            if (log.isWarnEnabled()) {
-                log.warn("Object was not serializable or empty, aborting PUT operation");
+
+        final byte[] objectBytes;
+        try {
+            objectBytes = serializeObject(object);
+        } catch (SerializationException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred while serializing the object, aborting PUT operation");
             }
-            return;
+            throw e;
         }
 
-        final byte[] objectID = getMD5Hash(key);
-        if (objectID.length == 0) {
-            if (log.isWarnEnabled()) {
-                log.warn("An exception occurred while hashing the key, aborting PUT operation");
+        final byte[] objectID;
+        try {
+            objectID = getMD5Hash(key);
+        } catch (NoSuchAlgorithmException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred while hashing the key, aborting PUT operation");
             }
-            return;
+            throw e;
         }
 
-        final MemoryDescriptor objectAddress = getMemoryDescriptorOfBytes(objectBytes, context);
-        if (objectAddress == null) {
-            if (log.isWarnEnabled()) {
-                log.warn("An exception occurred getting the objects memory address, aborting PUT operation");
+        final MemoryDescriptor objectAddress;
+        try {
+            objectAddress = getMemoryDescriptorOfBytes(objectBytes, context);
+        } catch (ControlException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred getting the objects memory address, aborting PUT operation");
             }
-            return;
+            throw e;
         }
 
         final ArrayList<Long> requests = new ArrayList<>();
@@ -168,12 +174,12 @@ public class InfinimumDBClient {
         }
     }
 
-    protected <T extends AutoCloseable> T pushResource(T resource) {
+    protected <T extends AutoCloseable> T pushResource(final T resource) {
         resources.push(resource);
         return resource;
     }
 
-    public Object get(String key) {
+    public Object get(final String key) {
         //TODO implement
         return null;
     }
