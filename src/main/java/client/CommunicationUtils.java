@@ -12,18 +12,10 @@ import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
 import java.io.Serializable;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 @Slf4j
 public class CommunicationUtils {
-
-    public static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
-        final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
-        return messageDigest.digest(text.getBytes(StandardCharsets.UTF_8));
-    }
 
     public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException {
         final MemorySegment source = MemorySegment.ofArray(object);
