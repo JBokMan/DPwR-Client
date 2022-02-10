@@ -46,7 +46,9 @@ public class CommunicationUtils {
     }
 
     public static Long prepareToSendRemoteKey(final MemoryDescriptor descriptor, final Endpoint endpoint) {
-        log.info("Prepare to send remote key");
+        if (log.isInfoEnabled()) {
+            log.info("Prepare to send remote key");
+        }
         return endpoint.sendTagged(descriptor, Tag.of(0L));
     }
 
