@@ -4,18 +4,23 @@ package client;
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
+import exceptions.TooLongKeyException;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
+import org.apache.commons.lang3.math.NumberUtils;
 import redis.clients.jedis.JedisPool;
 
 import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 
 import static client.CommunicationUtils.*;
 
@@ -24,9 +29,8 @@ public class InfinimumDBClient {
 
     private transient final JedisPool jedisClient;
     private transient Context context;
-    private transient final ResourceScope scope = ResourceScope.newSharedScope();
     private transient final ResourcePool resources = new ResourcePool();
-    private transient final InetSocketAddress serverAddress;
+    private transient final HashMap<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private transient Worker worker;
     private transient Endpoint endpoint;
 
@@ -37,7 +41,7 @@ public class InfinimumDBClient {
     };
 
     public InfinimumDBClient(final String serverHostAddress, final Integer serverPort, final String redisHostAddress, final Integer redisPort) {
-        this.serverAddress = new InetSocketAddress(serverHostAddress, serverPort);
+        this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
         setupServerConnection(serverHostAddress, serverPort);
         try {
             testServerConnection();
@@ -58,28 +62,29 @@ public class InfinimumDBClient {
     }
 
     public void put(final String key, final Serializable object) {
+        final ResourceScope scope = ResourceScope.newSharedScope();
         NativeLogger.enable();
         if (log.isInfoEnabled()) {
             log.info("Using UCX version {}", Context.getVersion());
         }
         try (resources) {
-            initialize();
-            putOperation(key, object, context);
+            initialize(0);
+            putOperation(key, object, context, scope);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
         } catch (CloseException e) {
             log.error("Closing resource failed", e);
         } catch (InterruptedException e) {
             log.error("Unexpected interrupt occurred", e);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("Hashing algorithm was not found", e);
+        } catch (TooLongKeyException e) {
+            log.error("Key was too long", e);
         }
 
         // Release resource scope
         scope.close();
     }
 
-    private void initialize() throws ControlException, InterruptedException {
+    private void initialize(final int serverID) throws ControlException, InterruptedException {
         // Create context parameters
         final ContextParameters contextParameters = new ContextParameters()
                 .setFeatures(FEATURE_SET)
@@ -108,17 +113,16 @@ public class InfinimumDBClient {
         );
 
         final EndpointParameters endpointParams = new EndpointParameters()
-                .setRemoteAddress(this.serverAddress);
+                .setRemoteAddress(this.serverMap.get(serverID));
 
-        log.info("Connecting to {}", this.serverAddress);
+        log.info("Connecting to {}", this.serverMap.get(serverID));
         this.endpoint = worker.createEndpoint(endpointParams);
     }
 
-    public void putOperation(final String key, final Serializable object, final Context context) throws SerializationException, NoSuchAlgorithmException, ControlException {
+    public void putOperation(final String key, final Serializable object, final Context context, final ResourceScope scope) throws SerializationException, ControlException, TooLongKeyException {
         if (log.isInfoEnabled()) {
             log.info("Starting PUT operation");
         }
-
 
         final byte[] objectBytes;
         try {
@@ -126,16 +130,6 @@ public class InfinimumDBClient {
         } catch (SerializationException e) {
             if (log.isErrorEnabled()) {
                 log.error("An exception occurred while serializing the object, aborting PUT operation");
-            }
-            throw e;
-        }
-
-        final byte[] objectID;
-        try {
-            objectID = getMD5Hash(key);
-        } catch (NoSuchAlgorithmException e) {
-            if (log.isErrorEnabled()) {
-                log.error("An exception occurred while hashing the key, aborting PUT operation");
             }
             throw e;
         }
@@ -150,10 +144,30 @@ public class InfinimumDBClient {
             throw e;
         }
 
+        HashMap<String, String> metadata = new HashMap<>();
+        metadata.put("key", key);
+        metadata.put("hash_count", "1");
+
+        final byte[] metadataBytes;
+        try {
+            metadataBytes = SerializationUtils.serialize(metadata);
+        } catch (SerializationException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred while serializing the key, aborting PUT operation");
+            }
+            throw e;
+        }
+
+        final byte[] metadataSizeBytes;
+        ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        byteBuffer.putInt(metadataBytes.length);
+        metadataSizeBytes = byteBuffer.array();
+
         final ArrayList<Long> requests = new ArrayList<>();
         requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), 0L, endpoint, scope));
-        requests.add(prepareToSendData(objectID, 0L, endpoint, scope));
         requests.add(prepareToSendRemoteKey(objectAddress, endpoint));
+        requests.add(prepareToSendData(metadataSizeBytes, 0L, endpoint, scope));
+        requests.add(prepareToSendData(metadataBytes, 0L, endpoint, scope));
 
         sendData(requests, worker);
 
