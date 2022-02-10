@@ -4,7 +4,7 @@ package client;
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
-import exceptions.TooLongKeyException;
+import exceptions.NotFoundException;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationException;
@@ -16,10 +16,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 
 import static client.CommunicationUtils.*;
@@ -76,8 +73,6 @@ public class InfinimumDBClient {
             log.error("Closing resource failed", e);
         } catch (InterruptedException e) {
             log.error("Unexpected interrupt occurred", e);
-        } catch (TooLongKeyException e) {
-            log.error("Key was too long", e);
         }
 
         // Release resource scope
@@ -119,7 +114,7 @@ public class InfinimumDBClient {
         this.endpoint = worker.createEndpoint(endpointParams);
     }
 
-    public void putOperation(final String key, final Serializable object, final Context context, final ResourceScope scope) throws SerializationException, ControlException, TooLongKeyException {
+    public void putOperation(final String key, final Serializable object, final Context context, final ResourceScope scope) throws SerializationException, ControlException {
         if (log.isInfoEnabled()) {
             log.info("Starting PUT operation");
         }
@@ -153,7 +148,7 @@ public class InfinimumDBClient {
             metadataBytes = SerializationUtils.serialize(metadata);
         } catch (SerializationException e) {
             if (log.isErrorEnabled()) {
-                log.error("An exception occurred while serializing the key, aborting PUT operation");
+                log.error("An exception occurred while serializing metadata map, aborting PUT operation");
             }
             throw e;
         }
@@ -181,7 +176,8 @@ public class InfinimumDBClient {
             if (log.isInfoEnabled()) {
                 log.info("Received \"{}\"", serverID);
             }
-            jedisClient.getResource().set(key.getBytes(StandardCharsets.UTF_8), new byte[]{serverID.byteValue()});
+            jedisClient.getResource().hset(key, "serverID", serverID.toString());
+            jedisClient.getResource().hsetnx(key, "hash_count", "1");
             if (log.isInfoEnabled()) {
                 log.info("Put completed");
             }
@@ -193,8 +189,119 @@ public class InfinimumDBClient {
         return resource;
     }
 
-    public Object get(final String key) {
-        //TODO implement
-        return null;
+    public byte[] get(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException {
+        if (log.isInfoEnabled()) {
+            log.info("Starting GET operation");
+        }
+        final ResourceScope scope = ResourceScope.newSharedScope();
+        NativeLogger.enable();
+        if (log.isInfoEnabled()) {
+            log.info("Using UCX version {}", Context.getVersion());
+        }
+
+        int serverID = 0;
+        final String response = jedisClient.getResource().hget(key, "serverID");
+        if (response == null) {
+            if (log.isWarnEnabled()) {
+                log.warn("Key was not found in Redis, defaulting to server id 0");
+            }
+        } else if (!NumberUtils.isCreatable(response)) {
+            if (log.isWarnEnabled()) {
+                log.warn("ServerID value was not a number in Redis, defaulting to server id 0");
+            }
+        } else {
+            serverID = Integer.parseInt(response);
+        }
+        if (log.isInfoEnabled()) {
+            log.info("Using server id: {}", serverID);
+        }
+
+        byte[] object = new byte[0];
+        try (resources) {
+            initialize(serverID);
+            object = getOperation(key, context, scope);
+        } catch (ControlException e) {
+            log.error("Native operation failed", e);
+            throw e;
+        } catch (CloseException e) {
+            log.error("Closing resource failed", e);
+            throw e;
+        } catch (InterruptedException e) {
+            log.error("Unexpected interrupt occurred", e);
+            throw e;
+        } catch (NotFoundException e) {
+            log.error("Object was not found", e);
+            throw e;
+        } finally {
+            scope.close();
+            resources.close();
+        }
+
+        return object;
+    }
+
+    private byte[] getOperation(final String key, final Context context, final ResourceScope scope) throws ControlException, NotFoundException {
+        int hashCount = 0;
+        final String response = jedisClient.getResource().hget(key, "hash_count");
+        if (response == null) {
+            if (log.isWarnEnabled()) {
+                log.warn("Key was not found in Redis, defaulting to hash count 1");
+            }
+        } else if (!NumberUtils.isCreatable(response)) {
+            if (log.isWarnEnabled()) {
+                log.warn("ServerID value was not a number in Redis, defaulting to hash count 1");
+            }
+        } else {
+            hashCount = Integer.parseInt(response);
+        }
+        if (log.isInfoEnabled()) {
+            log.info("Using hash count: {}", hashCount);
+        }
+
+        HashMap<String, String> getData = new HashMap<>();
+        getData.put("key", key);
+        getData.put("hash_count", String.valueOf(hashCount));
+
+        final byte[] getDataBytes;
+        try {
+            getDataBytes = SerializationUtils.serialize(getData);
+        } catch (SerializationException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred while the data map, aborting GET operation");
+            }
+            throw e;
+        }
+
+        final byte[] getDataSizeBytes;
+        ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        byteBuffer.putInt(getDataBytes.length);
+        getDataSizeBytes = byteBuffer.array();
+
+        final ArrayList<Long> requests = new ArrayList<>();
+        requests.add(prepareToSendData(SerializationUtils.serialize("GET"), 0L, endpoint, scope));
+        requests.add(prepareToSendData(getDataSizeBytes, 0L, endpoint, scope));
+        requests.add(prepareToSendData(getDataBytes, 0L, endpoint, scope));
+        sendData(requests, worker);
+
+        final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, scope));
+        if (log.isInfoEnabled()) {
+            log.info("Received \"{}\"", statusCode);
+        }
+
+        if ("200".equals(statusCode)) {
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(0L, worker);
+            final byte[] remoteObject = receiveRemoteObject(descriptor, endpoint, worker, scope, resources);
+            if (log.isInfoEnabled()) {
+                log.info("Read \"{}\" from remote buffer", SerializationUtils.deserialize(remoteObject).toString());
+            }
+            requests.clear();
+            requests.add(prepareToSendData(SerializationUtils.serialize("200"), 0L, endpoint, scope));
+            sendData(requests, worker);
+            return remoteObject;
+        } else if ("404".equals(statusCode)) {
+            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        } else {
+            return new byte[0];
+        }
     }
 }
