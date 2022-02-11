@@ -12,6 +12,7 @@ import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
 import java.io.Serializable;
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -33,11 +34,11 @@ public class CommunicationUtils {
         return sb.toString();
     }
 
-    public static Long getResponsibleServerID(final String key, final Integer serverCount) throws NoSuchAlgorithmException {
+    public static Integer getResponsibleServerID(final String key, final int serverCount) throws NoSuchAlgorithmException {
         final byte[] id = getMD5Hash(key);
         final String idAsHexValues = bytesToHex(id);
-        final Long idAsNumber = Long.decode(idAsHexValues);
-        return idAsNumber % serverCount;
+        final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
+        return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
     }
 
     public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException {
