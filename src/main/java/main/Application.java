@@ -7,17 +7,26 @@ import exceptions.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationUtils;
 
+import java.security.NoSuchAlgorithmException;
+
 @Slf4j
 public final class Application {
 
     public static void main(final String... args) {
         final InfinimumDBClient client = new InfinimumDBClient("localhost", 2998, "localhost", 6379);
-        client.put("I am the key", "I am the value");
+
+        try {
+            client.put("I am the key", "I am the value");
+        } catch (NoSuchAlgorithmException | InterruptedException | CloseException | ControlException e) {
+            if (log.isErrorEnabled()) {
+                log.info(e.getMessage());
+            }
+        }
 
         byte[] object = new byte[0];
         try {
             object = client.get("I am the key");
-        } catch (CloseException | NotFoundException | ControlException | InterruptedException e) {
+        } catch (CloseException | NotFoundException | ControlException | InterruptedException | NoSuchAlgorithmException e) {
             if (log.isErrorEnabled()) {
                 log.info(e.getMessage());
             }
@@ -31,7 +40,7 @@ public final class Application {
         object = new byte[0];
         try {
             object = client.get("I do not exist");
-        } catch (CloseException | NotFoundException | ControlException | InterruptedException e) {
+        } catch (CloseException | NotFoundException | ControlException | InterruptedException | NoSuchAlgorithmException e) {
             if (log.isErrorEnabled()) {
                 log.info(e.getMessage());
             }

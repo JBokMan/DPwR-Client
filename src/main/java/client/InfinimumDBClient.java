@@ -16,6 +16,7 @@ import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,7 +29,7 @@ public class InfinimumDBClient {
     private transient final JedisPool jedisClient;
     private transient Context context;
     private transient final ResourcePool resources = new ResourcePool();
-    private transient final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
+    private transient final Map<Long, InetSocketAddress> serverMap = new HashMap<>();
     private transient Worker worker;
     private transient Endpoint endpoint;
 
@@ -39,7 +40,7 @@ public class InfinimumDBClient {
     };
 
     public InfinimumDBClient(final String serverHostAddress, final Integer serverPort, final String redisHostAddress, final Integer redisPort) {
-        this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
+        this.serverMap.put(0L, new InetSocketAddress(serverHostAddress, serverPort));
         setupServerConnection(serverHostAddress, serverPort);
         try {
             testServerConnection();
@@ -59,28 +60,71 @@ public class InfinimumDBClient {
         //TODO implement
     }
 
-    public void put(final String key, final Serializable object) {
-        final ResourceScope scope = ResourceScope.newSharedScope();
-        NativeLogger.enable();
-        if (log.isInfoEnabled()) {
-            log.info("Using UCX version {}", Context.getVersion());
-        }
-        try (resources) {
-            initialize(0);
+    public void put(final String key, final Serializable object) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException {
+
+        try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
+            NativeLogger.enable();
+            if (log.isInfoEnabled()) {
+                log.info("Starting PUT operation");
+            }
+            if (log.isInfoEnabled()) {
+                log.info("Using UCX version {}", Context.getVersion());
+            }
+            initialize(key);
             putOperation(key, object, context, scope);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
+            throw e;
         } catch (CloseException e) {
             log.error("Closing resource failed", e);
+            throw e;
         } catch (InterruptedException e) {
             log.error("Unexpected interrupt occurred", e);
+            throw e;
+        } catch (NoSuchAlgorithmException e) {
+            log.error("Hash algorithm was not found", e);
+            throw e;
         }
-
-        // Release resource scope
-        scope.close();
     }
 
-    private void initialize(final int serverID) throws ControlException, InterruptedException {
+    public byte[] get(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException, NoSuchAlgorithmException {
+        final ResourceScope scope = ResourceScope.newSharedScope();
+        NativeLogger.enable();
+        if (log.isInfoEnabled()) {
+            log.info("Starting GET operation");
+        }
+        if (log.isInfoEnabled()) {
+            log.info("Using UCX version {}", Context.getVersion());
+        }
+
+        byte[] object;
+        try (resources) {
+            initialize(key);
+            object = getOperation(key, scope);
+        } catch (ControlException e) {
+            log.error("Native operation failed", e);
+            throw e;
+        } catch (CloseException e) {
+            log.error("Closing resource failed", e);
+            throw e;
+        } catch (InterruptedException e) {
+            log.error("Unexpected interrupt occurred", e);
+            throw e;
+        } catch (NotFoundException e) {
+            log.error("Object was not found", e);
+            throw e;
+        } catch (NoSuchAlgorithmException e) {
+            log.error("Hash algorithm was not found", e);
+            throw e;
+        } finally {
+            scope.close();
+            resources.close();
+        }
+
+        return object;
+    }
+
+    private void initialize(final String key) throws ControlException, InterruptedException, NoSuchAlgorithmException {
         // Create context parameters
         final ContextParameters contextParameters = new ContextParameters()
                 .setFeatures(FEATURE_SET)
@@ -108,18 +152,16 @@ public class InfinimumDBClient {
                 context.createWorker(workerParameters)
         );
 
-        final EndpointParameters endpointParams = new EndpointParameters()
-                .setRemoteAddress(this.serverMap.get(serverID));
+        Long responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
 
-        log.info("Connecting to {}", this.serverMap.get(serverID));
+        final EndpointParameters endpointParams = new EndpointParameters()
+                .setRemoteAddress(this.serverMap.get(responsibleServerID));
+
+        log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
         this.endpoint = worker.createEndpoint(endpointParams);
     }
 
     public void putOperation(final String key, final Serializable object, final Context context, final ResourceScope scope) throws SerializationException, ControlException {
-        if (log.isInfoEnabled()) {
-            log.info("Starting PUT operation");
-        }
-
         final byte[] objectBytes;
         try {
             objectBytes = serializeObject(object);
@@ -142,7 +184,6 @@ public class InfinimumDBClient {
 
         final HashMap<String, String> metadata = new HashMap<>();
         metadata.put("key", key);
-        metadata.put("hash_count", "1");
 
         final byte[] metadataBytes;
         try {
@@ -189,56 +230,6 @@ public class InfinimumDBClient {
         return resource;
     }
 
-    public byte[] get(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException {
-        if (log.isInfoEnabled()) {
-            log.info("Starting GET operation");
-        }
-        final ResourceScope scope = ResourceScope.newSharedScope();
-        NativeLogger.enable();
-        if (log.isInfoEnabled()) {
-            log.info("Using UCX version {}", Context.getVersion());
-        }
-
-        int serverID = 0;
-        final String response = jedisClient.getResource().hget(key, "serverID");
-        if (response == null) {
-            if (log.isWarnEnabled()) {
-                log.warn("Key was not found in Redis, defaulting to server id 0");
-            }
-        } else if (!NumberUtils.isCreatable(response)) {
-            if (log.isWarnEnabled()) {
-                log.warn("ServerID value was not a number in Redis, defaulting to server id 0");
-            }
-        } else {
-            serverID = Integer.parseInt(response);
-        }
-        if (log.isInfoEnabled()) {
-            log.info("Using server id: {}", serverID);
-        }
-
-        byte[] object;
-        try (resources) {
-            initialize(serverID);
-            object = getOperation(key, scope);
-        } catch (ControlException e) {
-            log.error("Native operation failed", e);
-            throw e;
-        } catch (CloseException e) {
-            log.error("Closing resource failed", e);
-            throw e;
-        } catch (InterruptedException e) {
-            log.error("Unexpected interrupt occurred", e);
-            throw e;
-        } catch (NotFoundException e) {
-            log.error("Object was not found", e);
-            throw e;
-        } finally {
-            scope.close();
-            resources.close();
-        }
-
-        return object;
-    }
 
     private byte[] getOperation(final String key, final ResourceScope scope) throws ControlException, NotFoundException {
         int hashCount = 0;

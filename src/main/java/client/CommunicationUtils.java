@@ -12,10 +12,33 @@ import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
 
 @Slf4j
 public class CommunicationUtils {
+
+    public static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
+        final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
+        return messageDigest.digest(text.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String bytesToHex(final byte[] bytes) {
+        final StringBuilder sb = new StringBuilder();
+        for (final byte b : bytes) {
+            sb.append(String.format("%02x", b));
+        }
+        return sb.toString();
+    }
+
+    public static Long getResponsibleServerID(final String key, final Integer serverCount) throws NoSuchAlgorithmException {
+        final byte[] id = getMD5Hash(key);
+        final String idAsHexValues = bytesToHex(id);
+        final Long idAsNumber = Long.decode(idAsHexValues);
+        return idAsNumber % serverCount;
+    }
 
     public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException {
         final MemorySegment source = MemorySegment.ofArray(object);
