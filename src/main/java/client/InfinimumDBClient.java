@@ -18,6 +18,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Map;
 
 import static client.CommunicationUtils.*;
 
@@ -27,7 +28,7 @@ public class InfinimumDBClient {
     private transient final JedisPool jedisClient;
     private transient Context context;
     private transient final ResourcePool resources = new ResourcePool();
-    private transient final HashMap<Integer, InetSocketAddress> serverMap = new HashMap<>();
+    private transient final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private transient Worker worker;
     private transient Endpoint endpoint;
 
@@ -139,7 +140,7 @@ public class InfinimumDBClient {
             throw e;
         }
 
-        HashMap<String, String> metadata = new HashMap<>();
+        final HashMap<String, String> metadata = new HashMap<>();
         metadata.put("key", key);
         metadata.put("hash_count", "1");
 
@@ -153,10 +154,9 @@ public class InfinimumDBClient {
             throw e;
         }
 
-        final byte[] metadataSizeBytes;
-        ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
         byteBuffer.putInt(metadataBytes.length);
-        metadataSizeBytes = byteBuffer.array();
+        final byte[] metadataSizeBytes = byteBuffer.array();
 
         final ArrayList<Long> requests = new ArrayList<>();
         requests.add(prepareToSendData(SerializationUtils.serialize("PUT"), 0L, endpoint, scope));
@@ -179,7 +179,7 @@ public class InfinimumDBClient {
             jedisClient.getResource().hset(key, "serverID", serverID.toString());
             jedisClient.getResource().hsetnx(key, "hash_count", "1");
             if (log.isInfoEnabled()) {
-                log.info("Put completed");
+                log.info("Put completed\n");
             }
         }
     }
@@ -216,10 +216,10 @@ public class InfinimumDBClient {
             log.info("Using server id: {}", serverID);
         }
 
-        byte[] object = new byte[0];
+        byte[] object;
         try (resources) {
             initialize(serverID);
-            object = getOperation(key, context, scope);
+            object = getOperation(key, scope);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
             throw e;
@@ -240,7 +240,7 @@ public class InfinimumDBClient {
         return object;
     }
 
-    private byte[] getOperation(final String key, final Context context, final ResourceScope scope) throws ControlException, NotFoundException {
+    private byte[] getOperation(final String key, final ResourceScope scope) throws ControlException, NotFoundException {
         int hashCount = 0;
         final String response = jedisClient.getResource().hget(key, "hash_count");
         if (response == null) {
@@ -258,7 +258,7 @@ public class InfinimumDBClient {
             log.info("Using hash count: {}", hashCount);
         }
 
-        HashMap<String, String> getData = new HashMap<>();
+        final HashMap<String, String> getData = new HashMap<>();
         getData.put("key", key);
         getData.put("hash_count", String.valueOf(hashCount));
 
@@ -272,10 +272,9 @@ public class InfinimumDBClient {
             throw e;
         }
 
-        final byte[] getDataSizeBytes;
-        ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
         byteBuffer.putInt(getDataBytes.length);
-        getDataSizeBytes = byteBuffer.array();
+        final byte[] getDataSizeBytes = byteBuffer.array();
 
         final ArrayList<Long> requests = new ArrayList<>();
         requests.add(prepareToSendData(SerializationUtils.serialize("GET"), 0L, endpoint, scope));
@@ -288,20 +287,22 @@ public class InfinimumDBClient {
             log.info("Received \"{}\"", statusCode);
         }
 
+        byte[] output = new byte[0];
         if ("200".equals(statusCode)) {
             final MemoryDescriptor descriptor = receiveMemoryDescriptor(0L, worker);
-            final byte[] remoteObject = receiveRemoteObject(descriptor, endpoint, worker, scope, resources);
+            output = receiveRemoteObject(descriptor, endpoint, worker, scope, resources);
             if (log.isInfoEnabled()) {
-                log.info("Read \"{}\" from remote buffer", SerializationUtils.deserialize(remoteObject).toString());
+                log.info("Read \"{}\" from remote buffer", SerializationUtils.deserialize(output).toString());
             }
             requests.clear();
             requests.add(prepareToSendData(SerializationUtils.serialize("200"), 0L, endpoint, scope));
             sendData(requests, worker);
-            return remoteObject;
+            if (log.isInfoEnabled()) {
+                log.info("Get completed\n");
+            }
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
-        } else {
-            return new byte[0];
         }
+        return output;
     }
 }
