@@ -29,18 +29,15 @@ public class InfinimumDBClient {
     private transient final JedisPool jedisClient;
     private transient Context context;
     private transient final ResourcePool resources = new ResourcePool();
-    private transient final Map<Long, InetSocketAddress> serverMap = new HashMap<>();
+    private transient final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private transient Worker worker;
     private transient Endpoint endpoint;
 
     private static final long DEFAULT_REQUEST_SIZE = 1024;
-    private static final ContextParameters.Feature[] FEATURE_SET = {
-            ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.WAKEUP, ContextParameters.Feature.AM,
-            ContextParameters.Feature.ATOMIC_32, ContextParameters.Feature.ATOMIC_64, ContextParameters.Feature.STREAM
-    };
+    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.WAKEUP, ContextParameters.Feature.AM, ContextParameters.Feature.ATOMIC_32, ContextParameters.Feature.ATOMIC_64, ContextParameters.Feature.STREAM};
 
     public InfinimumDBClient(final String serverHostAddress, final Integer serverPort, final String redisHostAddress, final Integer redisPort) {
-        this.serverMap.put(0L, new InetSocketAddress(serverHostAddress, serverPort));
+        this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
         setupServerConnection(serverHostAddress, serverPort);
         try {
             testServerConnection();
@@ -117,36 +114,26 @@ public class InfinimumDBClient {
 
     private void initialize(final String key) throws ControlException, InterruptedException, NoSuchAlgorithmException {
         // Create context parameters
-        final ContextParameters contextParameters = new ContextParameters()
-                .setFeatures(FEATURE_SET)
-                .setRequestSize(DEFAULT_REQUEST_SIZE);
+        final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET).setRequestSize(DEFAULT_REQUEST_SIZE);
 
         // Read configuration (Environment Variables)
-        final Configuration configuration = pushResource(
-                Configuration.read()
-        );
+        final Configuration configuration = pushResource(Configuration.read());
 
         log.info("Initializing context");
 
         // Initialize UCP context
-        this.context = pushResource(
-                Context.initialize(contextParameters, configuration)
-        );
+        this.context = pushResource(Context.initialize(contextParameters, configuration));
 
-        final WorkerParameters workerParameters = new WorkerParameters()
-                .setThreadMode(ThreadMode.SINGLE);
+        final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
 
         log.info("Creating worker");
 
         // Create a worker
-        this.worker = pushResource(
-                context.createWorker(workerParameters)
-        );
+        this.worker = pushResource(context.createWorker(workerParameters));
 
-        Long responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
+        final Integer responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
 
-        final EndpointParameters endpointParams = new EndpointParameters()
-                .setRemoteAddress(this.serverMap.get(responsibleServerID));
+        final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(this.serverMap.get(responsibleServerID));
 
         log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
         this.endpoint = worker.createEndpoint(endpointParams);
@@ -204,12 +191,6 @@ public class InfinimumDBClient {
         }
 
         if ("200".equals(statusCode)) {
-            final Integer serverID = SerializationUtils.deserialize(receiveData(81, 0L, worker, scope));
-            if (log.isInfoEnabled()) {
-                log.info("Received \"{}\"", serverID);
-            }
-            jedisClient.getResource().hset(key, "serverID", serverID.toString());
-            jedisClient.getResource().hsetnx(key, "hash_count", "1");
             if (log.isInfoEnabled()) {
                 log.info("Put completed\n");
             }
