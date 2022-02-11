@@ -61,7 +61,6 @@ public class InfinimumDBClient {
     }
 
     public void put(final String key, final Serializable object) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException {
-
         try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
             NativeLogger.enable();
             if (log.isInfoEnabled()) {
@@ -88,19 +87,16 @@ public class InfinimumDBClient {
     }
 
     public byte[] get(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException, NoSuchAlgorithmException {
-        final ResourceScope scope = ResourceScope.newSharedScope();
-        NativeLogger.enable();
-        if (log.isInfoEnabled()) {
-            log.info("Starting GET operation");
-        }
-        if (log.isInfoEnabled()) {
-            log.info("Using UCX version {}", Context.getVersion());
-        }
-
-        byte[] object;
-        try (resources) {
+        try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
+            NativeLogger.enable();
+            if (log.isInfoEnabled()) {
+                log.info("Starting GET operation");
+            }
+            if (log.isInfoEnabled()) {
+                log.info("Using UCX version {}", Context.getVersion());
+            }
             initialize(key);
-            object = getOperation(key, scope);
+            return getOperation(key, scope);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
             throw e;
@@ -116,12 +112,7 @@ public class InfinimumDBClient {
         } catch (NoSuchAlgorithmException e) {
             log.error("Hash algorithm was not found", e);
             throw e;
-        } finally {
-            scope.close();
-            resources.close();
         }
-
-        return object;
     }
 
     private void initialize(final String key) throws ControlException, InterruptedException, NoSuchAlgorithmException {
