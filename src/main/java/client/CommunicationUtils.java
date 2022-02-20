@@ -8,10 +8,7 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.SerializationException;
-import org.apache.commons.lang3.SerializationUtils;
 
-import java.io.Serializable;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -85,8 +82,7 @@ public class CommunicationUtils {
             log.info("Receiving message");
         }
 
-        final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters()
-                .setReceiveCallback(barrier::release));
+        final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters().setReceiveCallback(barrier::release));
 
         awaitRequestIfNecessary(request, worker, barrier);
 
@@ -101,8 +97,7 @@ public class CommunicationUtils {
             log.info("Receiving Remote Key");
         }
 
-        final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters()
-                .setReceiveCallback(barrier::release));
+        final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters().setReceiveCallback(barrier::release));
 
         awaitRequestIfNecessary(request, worker, barrier);
 
@@ -119,8 +114,7 @@ public class CommunicationUtils {
         final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
         resourcePool.push(remoteKey);
 
-        final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters()
-                .setReceiveCallback(barrier::release));
+        final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters().setReceiveCallback(barrier::release));
 
         awaitRequestIfNecessary(request, worker, barrier);
 
@@ -144,9 +138,5 @@ public class CommunicationUtils {
                 Requests.release(request);
             }
         }
-    }
-
-    public static byte[] serializeObject(final Object object) throws SerializationException {
-        return SerializationUtils.serialize((Serializable) object);
     }
 }
