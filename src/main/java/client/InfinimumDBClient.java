@@ -9,10 +9,7 @@ import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
-import org.apache.commons.lang3.math.NumberUtils;
-import redis.clients.jedis.JedisPool;
 
-import java.io.Serializable;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -25,8 +22,6 @@ import static client.CommunicationUtils.*;
 
 @Slf4j
 public class InfinimumDBClient {
-
-    private transient final JedisPool jedisClient;
     private transient Context context;
     private transient final ResourcePool resources = new ResourcePool();
     private transient final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
@@ -36,7 +31,7 @@ public class InfinimumDBClient {
     private static final long DEFAULT_REQUEST_SIZE = 1024;
     private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.WAKEUP, ContextParameters.Feature.AM, ContextParameters.Feature.ATOMIC_32, ContextParameters.Feature.ATOMIC_64, ContextParameters.Feature.STREAM};
 
-    public InfinimumDBClient(final String serverHostAddress, final Integer serverPort, final String redisHostAddress, final Integer redisPort) {
+    public InfinimumDBClient(final String serverHostAddress, final Integer serverPort) {
         this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
         setupServerConnection(serverHostAddress, serverPort);
         try {
@@ -44,9 +39,6 @@ public class InfinimumDBClient {
         } catch (ConnectException e) {
             log.error("InfinimumDB-Server could not be reached");
         }
-
-        this.jedisClient = new JedisPool(redisHostAddress, redisPort);
-        this.jedisClient.getResource();
     }
 
     private void testServerConnection() throws ConnectException {
@@ -57,7 +49,7 @@ public class InfinimumDBClient {
         //TODO implement
     }
 
-    public void put(final String key, final Serializable object) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException {
+    public void put(final String key, final byte[] value) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException {
         try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
             NativeLogger.enable();
             if (log.isInfoEnabled()) {
@@ -67,7 +59,7 @@ public class InfinimumDBClient {
                 log.info("Using UCX version {}", Context.getVersion());
             }
             initialize(key);
-            putOperation(key, object, context, scope);
+            putOperation(key, value, context, scope);
         } catch (ControlException e) {
             log.error("Native operation failed", e);
             throw e;
@@ -139,20 +131,10 @@ public class InfinimumDBClient {
         this.endpoint = worker.createEndpoint(endpointParams);
     }
 
-    public void putOperation(final String key, final Serializable object, final Context context, final ResourceScope scope) throws SerializationException, ControlException {
-        final byte[] objectBytes;
-        try {
-            objectBytes = serializeObject(object);
-        } catch (SerializationException e) {
-            if (log.isErrorEnabled()) {
-                log.error("An exception occurred while serializing the object, aborting PUT operation");
-            }
-            throw e;
-        }
-
+    public void putOperation(final String key, final byte[] value, final Context context, final ResourceScope scope) throws SerializationException, ControlException {
         final MemoryDescriptor objectAddress;
         try {
-            objectAddress = getMemoryDescriptorOfBytes(objectBytes, context);
+            objectAddress = getMemoryDescriptorOfBytes(value, context);
         } catch (ControlException e) {
             if (log.isErrorEnabled()) {
                 log.error("An exception occurred getting the objects memory address, aborting PUT operation");
@@ -204,26 +186,8 @@ public class InfinimumDBClient {
 
 
     private byte[] getOperation(final String key, final ResourceScope scope) throws ControlException, NotFoundException {
-        int hashCount = 0;
-        final String response = jedisClient.getResource().hget(key, "hash_count");
-        if (response == null) {
-            if (log.isWarnEnabled()) {
-                log.warn("Key was not found in Redis, defaulting to hash count 1");
-            }
-        } else if (!NumberUtils.isCreatable(response)) {
-            if (log.isWarnEnabled()) {
-                log.warn("ServerID value was not a number in Redis, defaulting to hash count 1");
-            }
-        } else {
-            hashCount = Integer.parseInt(response);
-        }
-        if (log.isInfoEnabled()) {
-            log.info("Using hash count: {}", hashCount);
-        }
-
         final HashMap<String, String> getData = new HashMap<>();
         getData.put("key", key);
-        getData.put("hash_count", String.valueOf(hashCount));
 
         final byte[] getDataBytes;
         try {
