@@ -9,46 +9,46 @@ import org.apache.commons.lang3.SerializationUtils;
 
 import java.security.NoSuchAlgorithmException;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+
 @Slf4j
 public final class Application {
 
-    public static void main(final String... args) {
-        final InfinimumDBClient client = new InfinimumDBClient("localhost", 2998, "localhost", 6379);
+    private static final String serverHostAddress = "localhost";
+    private static final Integer serverPort = 2998;
 
-        try {
-            client.put("I am the key", "I am the value");
-        } catch (NoSuchAlgorithmException | InterruptedException | CloseException | ControlException e) {
-            if (log.isErrorEnabled()) {
-                log.info(e.getMessage());
-            }
-        }
+    public static void main(final String... args) throws CloseException, NotFoundException, NoSuchAlgorithmException, ControlException, InterruptedException {
+        tesTwoKeyValuesWork();
+    }
 
-        byte[] object = new byte[0];
-        try {
-            object = client.get("I am the key");
-        } catch (CloseException | NotFoundException | ControlException | InterruptedException | NoSuchAlgorithmException e) {
-            if (log.isErrorEnabled()) {
-                log.info(e.getMessage());
-            }
-        }
-        if (object != null && object.length > 0) {
-            if (log.isInfoEnabled()) {
-                log.info(SerializationUtils.deserialize(object).toString() + "\n");
-            }
-        }
+    private static void testCanPutAndGetObject() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
+        log.debug("Start testCanPutAndGetObject:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        String key = "This is a key";
+        byte[] value = SerializationUtils.serialize("This is a value");
 
-        object = new byte[0];
-        try {
-            object = client.get("I do not exist");
-        } catch (CloseException | NotFoundException | ControlException | InterruptedException | NoSuchAlgorithmException e) {
-            if (log.isErrorEnabled()) {
-                log.info(e.getMessage());
-            }
-        }
-        if (object != null && object.length > 0) {
-            if (log.isInfoEnabled()) {
-                log.info(SerializationUtils.deserialize(object).toString() + "\n");
-            }
-        }
+        client.put(key, value);
+        byte[] response = client.get(key);
+
+        assertArrayEquals(value, response);
+        log.debug("End testCanPutAndGetObject:");
+    }
+
+    private static void tesTwoKeyValuesWork() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
+        log.debug("Start tesTwoKeyValuesWork:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        String key = "This is a key";
+        byte[] value = SerializationUtils.serialize("This is a value");
+        String key2 = "This is a key2";
+        byte[] value2 = SerializationUtils.serialize("This is a value2");
+
+        client.put(key, value);
+        client.put(key2, value2);
+        byte[] response = client.get(key);
+        byte[] response2 = client.get(key2);
+
+        assertArrayEquals(value, response);
+        assertArrayEquals(value2, response2);
+        log.debug("End tesTwoKeyValuesWork:");
     }
 }
