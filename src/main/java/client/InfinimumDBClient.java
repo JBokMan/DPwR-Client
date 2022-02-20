@@ -104,6 +104,73 @@ public class InfinimumDBClient {
         }
     }
 
+    public void del(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException, NoSuchAlgorithmException {
+        try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
+            NativeLogger.enable();
+            if (log.isInfoEnabled()) {
+                log.info("Starting DEL operation");
+            }
+            if (log.isInfoEnabled()) {
+                log.info("Using UCX version {}", Context.getVersion());
+            }
+            initialize(key);
+            delOperation(key, scope);
+        } catch (ControlException e) {
+            log.error("Native operation failed", e);
+            throw e;
+        } catch (CloseException e) {
+            log.error("Closing resource failed", e);
+            throw e;
+        } catch (InterruptedException e) {
+            log.error("Unexpected interrupt occurred", e);
+            throw e;
+        } catch (NotFoundException e) {
+            log.error("Object was not found", e);
+            throw e;
+        } catch (NoSuchAlgorithmException e) {
+            log.error("Hash algorithm was not found", e);
+            throw e;
+        }
+    }
+
+    private void delOperation(String key, ResourceScope scope) throws ControlException, NotFoundException {
+        final HashMap<String, String> getData = new HashMap<>();
+        getData.put("key", key);
+
+        final byte[] getDataBytes;
+        try {
+            getDataBytes = SerializationUtils.serialize(getData);
+        } catch (SerializationException e) {
+            if (log.isErrorEnabled()) {
+                log.error("An exception occurred while the data map, aborting Del operation");
+            }
+            throw e;
+        }
+
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES);
+        byteBuffer.putInt(getDataBytes.length);
+        final byte[] getDataSizeBytes = byteBuffer.array();
+
+        final ArrayList<Long> requests = new ArrayList<>();
+        requests.add(prepareToSendData(SerializationUtils.serialize("DEL"), 0L, endpoint, scope));
+        requests.add(prepareToSendData(getDataSizeBytes, 0L, endpoint, scope));
+        requests.add(prepareToSendData(getDataBytes, 0L, endpoint, scope));
+        sendData(requests, worker);
+
+        final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, scope));
+        if (log.isInfoEnabled()) {
+            log.info("Received \"{}\"", statusCode);
+        }
+
+        if ("204".equals(statusCode)) {
+            if (log.isInfoEnabled()) {
+                log.info("Del completed\n");
+            }
+        } else if ("404".equals(statusCode)) {
+            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        }
+    }
+
     private void initialize(final String key) throws ControlException, InterruptedException, NoSuchAlgorithmException {
         // Create context parameters
         final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET).setRequestSize(DEFAULT_REQUEST_SIZE);

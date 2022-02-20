@@ -18,6 +18,7 @@ public final class Application {
     private static final Integer serverPort = 2998;
 
     public static void main(final String... args) throws CloseException, NotFoundException, NoSuchAlgorithmException, ControlException, InterruptedException {
+        testCanPutAndGetObject();
         tesTwoKeyValuesWork();
     }
 
@@ -31,6 +32,8 @@ public final class Application {
         byte[] response = client.get(key);
 
         assertArrayEquals(value, response);
+
+        client.del(key);
         log.debug("End testCanPutAndGetObject:");
     }
 
@@ -49,6 +52,9 @@ public final class Application {
 
         assertArrayEquals(value, response);
         assertArrayEquals(value2, response2);
+
+        client.del(key);
+        client.del(key2);
         log.debug("End tesTwoKeyValuesWork:");
     }
 }
