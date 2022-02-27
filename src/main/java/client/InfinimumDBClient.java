@@ -4,6 +4,7 @@ package client;
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
+import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
@@ -49,7 +50,7 @@ public class InfinimumDBClient {
         //TODO implement
     }
 
-    public void put(final String key, final byte[] value) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException {
+    public void put(final String key, final byte[] value) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException, DuplicateKeyException {
         try (ResourceScope scope = ResourceScope.newSharedScope(); resources) {
             NativeLogger.enable();
             if (log.isInfoEnabled()) {
@@ -198,7 +199,7 @@ public class InfinimumDBClient {
         this.endpoint = worker.createEndpoint(endpointParams);
     }
 
-    public void putOperation(final String key, final byte[] value, final Context context, final ResourceScope scope) throws SerializationException, ControlException {
+    public void putOperation(final String key, final byte[] value, final Context context, final ResourceScope scope) throws SerializationException, ControlException, DuplicateKeyException {
         final MemoryDescriptor objectAddress;
         try {
             objectAddress = getMemoryDescriptorOfBytes(value, context);
@@ -243,6 +244,8 @@ public class InfinimumDBClient {
             if (log.isInfoEnabled()) {
                 log.info("Put completed\n");
             }
+        } else if ("409".equals(statusCode)) {
+            throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
     }
 
