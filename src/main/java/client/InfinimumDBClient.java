@@ -1,6 +1,5 @@
 package client;
 
-
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
@@ -12,7 +11,6 @@ import org.apache.commons.lang3.SerializationUtils;
 
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -49,79 +47,29 @@ public class InfinimumDBClient {
         //TODO implement
     }
 
-    public void put(final String key, final byte[] value) throws NoSuchAlgorithmException, InterruptedException, CloseException, ControlException, DuplicateKeyException {
+    public void put(final String key, final byte[] value) throws CloseException, ControlException, DuplicateKeyException {
         try (resources) {
-            NativeLogger.enable();
-            log.info("Starting PUT operation");
-            log.info("Using UCX version {}", Context.getVersion());
             initialize(key);
             putOperation(key, value, context);
-        } catch (ControlException e) {
-            log.error("Native operation failed", e);
-            throw e;
-        } catch (CloseException e) {
-            log.error("Closing resource failed", e);
-            throw e;
-        } catch (InterruptedException e) {
-            log.error("Unexpected interrupt occurred", e);
-            throw e;
-        } catch (NoSuchAlgorithmException e) {
-            log.error("Hash algorithm was not found", e);
-            throw e;
         }
     }
 
-    public byte[] get(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException, NoSuchAlgorithmException {
+    public byte[] get(final String key) throws CloseException, NotFoundException, ControlException {
         try (resources) {
-            NativeLogger.enable();
-            log.info("Starting GET operation");
-            log.info("Using UCX version {}", Context.getVersion());
             initialize(key);
             return getOperation(key);
-        } catch (ControlException e) {
-            log.error("Native operation failed", e);
-            throw e;
-        } catch (CloseException e) {
-            log.error("Closing resource failed", e);
-            throw e;
-        } catch (InterruptedException e) {
-            log.error("Unexpected interrupt occurred", e);
-            throw e;
-        } catch (NotFoundException e) {
-            log.error("Object was not found", e);
-            throw e;
-        } catch (NoSuchAlgorithmException e) {
-            log.error("Hash algorithm was not found", e);
-            throw e;
         }
     }
 
-    public void del(final String key) throws CloseException, NotFoundException, ControlException, InterruptedException, NoSuchAlgorithmException {
+    public void del(final String key) throws CloseException, NotFoundException, ControlException {
         try (resources) {
-            NativeLogger.enable();
-            log.info("Starting DEL operation");
-            log.info("Using UCX version {}", Context.getVersion());
             initialize(key);
             delOperation(key);
-        } catch (ControlException e) {
-            log.error("Native operation failed", e);
-            throw e;
-        } catch (CloseException e) {
-            log.error("Closing resource failed", e);
-            throw e;
-        } catch (InterruptedException e) {
-            log.error("Unexpected interrupt occurred", e);
-            throw e;
-        } catch (NotFoundException e) {
-            log.error("Object was not found", e);
-            throw e;
-        } catch (NoSuchAlgorithmException e) {
-            log.error("Hash algorithm was not found", e);
-            throw e;
         }
     }
 
     public void putOperation(final String key, final byte[] value, final Context context) throws SerializationException, ControlException, DuplicateKeyException {
+        log.info("Starting PUT operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
         requests.add(prepareToSendData(serialize("PUT"), 0L, endpoint));
@@ -141,6 +89,7 @@ public class InfinimumDBClient {
     }
 
     private byte[] getOperation(final String key) throws ControlException, NotFoundException {
+        log.info("Starting GET operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
         requests.add(prepareToSendData(serialize("GET"), 0L, endpoint));
@@ -164,7 +113,8 @@ public class InfinimumDBClient {
         return result;
     }
 
-    private void delOperation(String key) throws ControlException, NotFoundException {
+    private void delOperation(String key) throws NotFoundException {
+        log.info("Starting DEL operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
         requests.add(prepareToSendData(serialize("DEL"), 0L, endpoint));
@@ -182,23 +132,30 @@ public class InfinimumDBClient {
         log.info("Del completed\n");
     }
 
-    private void initialize(final String key) throws ControlException, InterruptedException, NoSuchAlgorithmException {
+    private void initialize(final String key) throws ControlException {
+        NativeLogger.enable();
+        log.info("Using UCX version {}", Context.getVersion());
+
         // Create context parameters
         final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET).setRequestSize(DEFAULT_REQUEST_SIZE);
 
         // Read configuration (Environment Variables)
         final Configuration configuration = pushResource(Configuration.read());
-        log.info("Initializing context");
 
         // Initialize UCP context
+        log.info("Initializing context");
         this.context = pushResource(Context.initialize(contextParameters, configuration));
         final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
-        log.info("Creating worker");
 
         // Create a worker
+        log.info("Creating worker");
         this.worker = pushResource(context.createWorker(workerParameters));
+
+        // Determining responsible server
         final Integer responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
         final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(this.serverMap.get(responsibleServerID));
+
+        // Creating Endpoint
         log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
         this.endpoint = worker.createEndpoint(endpointParams);
     }

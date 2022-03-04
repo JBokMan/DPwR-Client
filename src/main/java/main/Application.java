@@ -7,8 +7,6 @@ import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 
-import java.security.NoSuchAlgorithmException;
-
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -19,7 +17,7 @@ public final class Application {
     private static final String serverHostAddress = "localhost";
     private static final Integer serverPort = 2998;
 
-    public static void main(final String... args) throws CloseException, NotFoundException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
+    public static void main(final String... args) throws CloseException, NotFoundException, ControlException, DuplicateKeyException {
         testCanPutAndGetObject();
         testTwoKeyValuesWork();
         testTwoKeysWithCollidingHash();
@@ -31,7 +29,7 @@ public final class Application {
         test1000KeyValues();
     }
 
-    private static void testCanPutAndGetObject() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testCanPutAndGetObject() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testCanPutAndGetObject:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "This is a key";
@@ -46,7 +44,7 @@ public final class Application {
         log.debug("End testCanPutAndGetObject:");
     }
 
-    private static void testTwoKeyValuesWork() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testTwoKeyValuesWork() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testTwoKeyValuesWork:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "This is a key";
@@ -67,7 +65,7 @@ public final class Application {
         log.debug("End testTwoKeyValuesWork:");
     }
 
-    private static void testTwoKeysWithCollidingHash() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testTwoKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testTwoKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -88,7 +86,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHash() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testThreeKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testThreeKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -115,7 +113,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testThreeKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -145,7 +143,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -175,7 +173,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder2:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, ControlException, NotFoundException, DuplicateKeyException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -205,7 +203,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder3:");
     }
 
-    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException, NotFoundException {
+    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, ControlException, DuplicateKeyException, NotFoundException {
         log.debug("Start testPutKeyThatAlreadyExistsFails:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
@@ -223,13 +221,13 @@ public final class Application {
         log.debug("End testPutKeyThatAlreadyExistsFails:");
     }
 
-    private static void test1000KeyValues() throws CloseException, NotFoundException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
+    private static void test1000KeyValues() throws CloseException, NotFoundException, ControlException, DuplicateKeyException {
         testCanPut1000Times();
         testCanGet1000Times();
         testCanDelete1000Times();
     }
 
-    private static void testCanPut1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
+    private static void testCanPut1000Times() throws CloseException, ControlException, DuplicateKeyException {
         log.debug("Start testCanPut1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
@@ -241,7 +239,7 @@ public final class Application {
         log.debug("End testCanPut1000Times:");
     }
 
-    private static void testCanGet1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
+    private static void testCanGet1000Times() throws CloseException, ControlException, NotFoundException {
         log.debug("Start testCanGet1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
@@ -254,7 +252,7 @@ public final class Application {
         log.debug("End testCanGet1000Times:");
     }
 
-    private static void testCanDelete1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
+    private static void testCanDelete1000Times() throws CloseException, ControlException, NotFoundException {
         log.debug("Start testCanDelete1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
