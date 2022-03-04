@@ -1,0 +1,140 @@
+package utils;
+
+import de.hhu.bsinfo.infinileap.binding.*;
+import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
+import de.hhu.bsinfo.infinileap.example.util.Requests;
+import jdk.incubator.foreign.MemorySegment;
+import jdk.incubator.foreign.ResourceScope;
+import jdk.incubator.foreign.ValueLayout;
+import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.SerializationException;
+
+import java.lang.ref.Cleaner;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.apache.commons.lang3.SerializationUtils.serialize;
+import static utils.HashUtils.bytesToHex;
+import static utils.HashUtils.generateID;
+
+@Slf4j
+public class CommunicationUtils {
+
+    public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException {
+        final MemorySegment source = MemorySegment.ofArray(object);
+        final MemoryRegion memoryRegion = context.allocateMemory(object.length);
+        memoryRegion.segment().copyFrom(source);
+        return memoryRegion.descriptor();
+    }
+
+    public static Long prepareToSendData(final byte[] data, final long tagID, final Endpoint endpoint) {
+        log.info("Prepare to send data");
+        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
+        final int dataSize = data.length;
+
+        final MemorySegment source = MemorySegment.ofArray(data);
+        final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
+        buffer.copyFrom(source);
+
+        return endpoint.sendTagged(buffer, Tag.of(tagID), new RequestParameters());
+    }
+
+    public static Long prepareToSendRemoteKey(final byte[] value, final Endpoint endpoint, final Context context) throws ControlException {
+        log.info("Prepare to send remote key");
+        final MemoryDescriptor objectAddress;
+        try {
+            objectAddress = getMemoryDescriptorOfBytes(value, context);
+        } catch (ControlException e) {
+            log.error(e.getMessage());
+            throw e;
+        }
+        return endpoint.sendTagged(objectAddress, Tag.of(0L));
+    }
+
+    public static void sendData(final List<Long> requests, final Worker worker) {
+        log.info("Sending data");
+        for (final Long request : requests) {
+            Requests.poll(worker, request);
+        }
+    }
+
+    public static void sendSingleMessage(final byte[] data, final long tagID, final Endpoint endpoint, final Worker worker) {
+        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
+        final Long request = prepareToSendData(data, tagID, endpoint);
+        sendData(List.of(request), worker);
+        scope.close();
+    }
+
+    public static byte[] receiveData(final int size, final long tagID, final Worker worker) {
+        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
+        final CommunicationBarrier barrier = new CommunicationBarrier();
+        final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
+
+        log.info("Receiving message");
+
+        RequestParameters requestParameters = new RequestParameters(scope).setReceiveCallback(barrier::release);
+        final long request = worker.receiveTagged(buffer, Tag.of(tagID), requestParameters);
+
+        awaitRequestIfNecessary(request, worker);
+
+        byte[] result = buffer.toArray(ValueLayout.JAVA_BYTE);
+        scope.close();
+        return result;
+    }
+
+    @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
+    public static byte[] receiveRemoteObject(final Endpoint endpoint, final Worker worker) throws ControlException {
+        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
+
+        final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+        log.info("Receiving Remote Key");
+        final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+        awaitRequestIfNecessary(request, worker);
+
+        final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
+        try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+            final long request2 = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+            awaitRequestIfNecessary(request2, worker);
+        }
+
+        byte[] result = targetBuffer.toArray(ValueLayout.JAVA_BYTE);
+        scope.close();
+        return result;
+    }
+
+    private static void awaitRequestIfNecessary(final long request, final Worker worker) {
+        if (Status.isError(request)) {
+            log.warn("A request has an error status");
+        }
+        Requests.poll(worker, request);
+    }
+
+    public static ArrayList<Long> prepareToSendKey(String key, Endpoint endpoint) {
+        final ArrayList<Long> requests = new ArrayList<>();
+
+        final byte[] keyBytes;
+        try {
+            keyBytes = serialize(key);
+        } catch (SerializationException e) {
+            log.error(e.getMessage());
+            throw e;
+        }
+
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(keyBytes.length);
+        final byte[] keySizeBytes = byteBuffer.array();
+
+        requests.add(prepareToSendData(keySizeBytes, 0L, endpoint));
+        requests.add(prepareToSendData(keyBytes, 0L, endpoint));
+
+        return requests;
+    }
+
+    public static Integer getResponsibleServerID(final String key, final int serverCount) {
+        final byte[] id = generateID(key);
+        final String idAsHexValues = bytesToHex(id);
+        final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
+        return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
+    }
+}

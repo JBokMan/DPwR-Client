@@ -216,7 +216,7 @@ public final class Application {
 
         client.put(key, value);
         client.put(key2, value2);
-        Exception e = assertThrows(DuplicateKeyException.class, () -> client.put(key2, value3));
+        assertThrows(DuplicateKeyException.class, () -> client.put(key2, value3));
 
         client.del(key);
         client.del(key2);
@@ -229,7 +229,7 @@ public final class Application {
         testCanDelete1000Times();
     }
 
-    private static void testCanPut1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testCanPut1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
         log.debug("Start testCanPut1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
@@ -241,7 +241,7 @@ public final class Application {
         log.debug("End testCanPut1000Times:");
     }
 
-    private static void testCanGet1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testCanGet1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
         log.debug("Start testCanGet1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
@@ -254,7 +254,7 @@ public final class Application {
         log.debug("End testCanGet1000Times:");
     }
 
-    private static void testCanDelete1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+    private static void testCanDelete1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException {
         log.debug("Start testCanDelete1000Times:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
