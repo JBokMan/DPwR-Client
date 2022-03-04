@@ -4,6 +4,11 @@
 ![Alt text](./documentation/images/Initialization.svg)
 ![Alt text](./documentation/images/Put.svg)
 
+## How to run the client
+
+1. run ```./gradlew installDist```
+2. run ```./build/install/InfinimumDB-Client/bin/InfinimumDB-Client```
+
 ## Problems & Solutions:
 
 #### You get the error "java.lang.UnsatisfiedLinkError: no stdc++ in java.library.path"
