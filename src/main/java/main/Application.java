@@ -6,11 +6,12 @@ import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.SerializationUtils;
 
 import java.security.NoSuchAlgorithmException;
 
+import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @Slf4j
 public final class Application {
@@ -26,40 +27,15 @@ public final class Application {
         testThreeKeysWithCollidingHashDeletingInOrder1();
         testThreeKeysWithCollidingHashDeletingInOrder2();
         testThreeKeysWithCollidingHashDeletingInOrder3();
-    }
-
-    private static void testDelete() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
-        log.debug("Start testCanPutAndGetObject:");
-        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-        String key = "This is a key";
-        String key2 = "This is a key2";
-        String key3 = "hash_collision_test_1";
-        String key4 = "hash_collision_test_2";
-
-        try {
-            client.del(key);
-        } catch (NotFoundException e) {
-        }
-        try {
-            client.del(key2);
-        } catch (NotFoundException e) {
-        }
-        try {
-            client.del(key3);
-        } catch (NotFoundException e) {
-        }
-        try {
-            client.del(key4);
-        } catch (NotFoundException e) {
-        }
-        log.debug("End testCanPutAndGetObject:");
+        testPutKeyThatAlreadyExistsFails();
+        test1000KeyValues();
     }
 
     private static void testCanPutAndGetObject() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
         log.debug("Start testCanPutAndGetObject:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "This is a key";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
 
         client.put(key, value);
         byte[] response = client.get(key);
@@ -74,9 +50,9 @@ public final class Application {
         log.debug("Start testTwoKeyValuesWork:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "This is a key";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "This is a key2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -95,9 +71,9 @@ public final class Application {
         log.debug("Start testTwoKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "hash_collision_test_2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -116,11 +92,11 @@ public final class Application {
         log.debug("Start testThreeKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "hash_collision_test_2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
         String key3 = "hash_collision_test_3";
-        byte[] value3 = SerializationUtils.serialize("This is a value3");
+        byte[] value3 = serialize("This is a value3");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -143,11 +119,11 @@ public final class Application {
         log.debug("Start testThreeKeysWithCollidingHash:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "hash_collision_test_2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
         String key3 = "hash_collision_test_3";
-        byte[] value3 = SerializationUtils.serialize("This is a value3");
+        byte[] value3 = serialize("This is a value3");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -173,11 +149,11 @@ public final class Application {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "hash_collision_test_2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
         String key3 = "hash_collision_test_3";
-        byte[] value3 = SerializationUtils.serialize("This is a value3");
+        byte[] value3 = serialize("This is a value3");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -203,11 +179,11 @@ public final class Application {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         String key = "hash_collision_test_1";
-        byte[] value = SerializationUtils.serialize("This is a value");
+        byte[] value = serialize("This is a value");
         String key2 = "hash_collision_test_2";
-        byte[] value2 = SerializationUtils.serialize("This is a value2");
+        byte[] value2 = serialize("This is a value2");
         String key3 = "hash_collision_test_3";
-        byte[] value3 = SerializationUtils.serialize("This is a value3");
+        byte[] value3 = serialize("This is a value3");
 
         client.put(key, value);
         client.put(key2, value2);
@@ -227,5 +203,65 @@ public final class Application {
 
         client.del(key);
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder3:");
+    }
+
+    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException, NotFoundException {
+        log.debug("Start testPutKeyThatAlreadyExistsFails:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        String key = "hash_collision_test_1";
+        byte[] value = serialize("This is a value");
+        String key2 = "hash_collision_test_2";
+        byte[] value2 = serialize("This is a value2");
+        byte[] value3 = serialize("This is a value3");
+
+        client.put(key, value);
+        client.put(key2, value2);
+        Exception e = assertThrows(DuplicateKeyException.class, () -> client.put(key2, value3));
+
+        client.del(key);
+        client.del(key2);
+        log.debug("End testPutKeyThatAlreadyExistsFails:");
+    }
+
+    private static void test1000KeyValues() throws CloseException, NotFoundException, NoSuchAlgorithmException, ControlException, InterruptedException, DuplicateKeyException {
+        testCanPut1000Times();
+        testCanGet1000Times();
+        testCanDelete1000Times();
+    }
+
+    private static void testCanPut1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+        log.debug("Start testCanPut1000Times:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+
+        for (int i = 0; i < 1000; i++) {
+            String key = "This is a key" + i;
+            byte[] value = serialize("This is a value" + i);
+            client.put(key, value);
+        }
+        log.debug("End testCanPut1000Times:");
+    }
+
+    private static void testCanGet1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+        log.debug("Start testCanGet1000Times:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+
+        for (int i = 0; i < 1000; i++) {
+            String key = "This is a key" + i;
+            byte[] value = serialize("This is a value" + i);
+            byte[] response = client.get(key);
+            assertArrayEquals(value, response);
+        }
+        log.debug("End testCanGet1000Times:");
+    }
+
+    private static void testCanDelete1000Times() throws CloseException, NoSuchAlgorithmException, ControlException, InterruptedException, NotFoundException, DuplicateKeyException {
+        log.debug("Start testCanDelete1000Times:");
+        InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+
+        for (int i = 0; i < 1000; i++) {
+            String key = "This is a key" + i;
+            client.del(key);
+        }
+        log.debug("End testCanDelete1000Times:");
     }
 }
