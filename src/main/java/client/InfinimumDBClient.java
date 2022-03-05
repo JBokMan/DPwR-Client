@@ -100,17 +100,16 @@ public class InfinimumDBClient {
         final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker));
         log.info("Received status code: \"{}\"", statusCode);
 
-        byte[] result = new byte[0];
+        byte[] value = new byte[0];
         if ("200".equals(statusCode)) {
-            result = receiveRemoteObject(endpoint, worker);
-            log.info("Read \"{}\" from remote buffer", SerializationUtils.deserialize(result).toString());
+            value = receiveValue(endpoint, worker);
             sendSingleMessage(serialize("200"), 0L, endpoint, worker);
 
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
         log.info("Get completed\n");
-        return result;
+        return value;
     }
 
     private void delOperation(String key) throws NotFoundException {

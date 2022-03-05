@@ -7,6 +7,7 @@ import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
 import lombok.extern.slf4j.Slf4j;
+import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 
 import java.lang.ref.Cleaner;
@@ -15,6 +16,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.apache.commons.lang3.SerializationUtils.deserialize;
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static utils.HashUtils.bytesToHex;
 import static utils.HashUtils.generateID;
@@ -85,7 +87,7 @@ public class CommunicationUtils {
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
-    public static byte[] receiveRemoteObject(final Endpoint endpoint, final Worker worker) throws ControlException {
+    public static byte[] receiveValue(final Endpoint endpoint, final Worker worker) throws ControlException {
         final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
 
         final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
@@ -99,9 +101,12 @@ public class CommunicationUtils {
             awaitRequestIfNecessary(request2, worker);
         }
 
-        byte[] result = targetBuffer.toArray(ValueLayout.JAVA_BYTE);
+        ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
+        PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
+        log.info("Read \"{}\" from remote buffer", entry);
         scope.close();
-        return result;
+
+        return entry.value;
     }
 
     private static void awaitRequestIfNecessary(final long request, final Worker worker) {
@@ -136,5 +141,11 @@ public class CommunicationUtils {
         final String idAsHexValues = bytesToHex(id);
         final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
         return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
+    }
+
+    public static PlasmaEntry getPlasmaEntryFromBuffer(ByteBuffer objectBuffer) {
+        byte[] data = new byte[objectBuffer.remaining()];
+        objectBuffer.get(data);
+        return deserialize(data);
     }
 }
