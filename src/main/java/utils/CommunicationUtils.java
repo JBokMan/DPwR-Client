@@ -45,7 +45,6 @@ public class CommunicationUtils {
         buffer.copyFrom(source);
 
         return endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters());
-
     }
 
     public static Long prepareToSendRemoteKey(final byte[] value, final Endpoint endpoint, final Context context) throws ControlException, CloseException {
@@ -104,15 +103,10 @@ public class CommunicationUtils {
     }
 
     public static byte[] receiveData(final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
+        log.info("Receiving message");
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
-            final CommunicationBarrier barrier = new CommunicationBarrier();
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
-
-            log.info("Receiving message");
-
-            RequestParameters requestParameters = new RequestParameters(scope).setReceiveCallback(barrier::release);
-            final long request = worker.receiveTagged(buffer, Tag.of(0L), requestParameters);
-
+            final long request = worker.receiveTagged(buffer, Tag.of(0L), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
