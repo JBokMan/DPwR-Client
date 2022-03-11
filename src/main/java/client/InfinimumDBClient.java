@@ -89,7 +89,7 @@ public class InfinimumDBClient {
         log.info("Put completed\n");
     }
 
-    private byte[] getOperation(final String key, int timeoutMs) throws ControlException, NotFoundException, TimeoutException {
+    private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {
         log.info("Starting GET operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
@@ -113,7 +113,7 @@ public class InfinimumDBClient {
         return value;
     }
 
-    private void delOperation(String key, int timeoutMs) throws NotFoundException, TimeoutException {
+    private void delOperation(final String key, final int timeoutMs) throws NotFoundException, TimeoutException {
         log.info("Starting DEL operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
@@ -128,7 +128,6 @@ public class InfinimumDBClient {
         if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
-
         log.info("Del completed\n");
     }
 

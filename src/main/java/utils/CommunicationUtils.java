@@ -90,7 +90,7 @@ public class CommunicationUtils {
             }
         }
         if (timeoutHappened) {
-            throw new TimeoutException();
+            throw new TimeoutException("A timeout occurred while sending data");
         }
     }
 
@@ -110,7 +110,6 @@ public class CommunicationUtils {
             final long request = worker.receiveTagged(buffer, Tag.of(tagID), requestParameters);
 
             awaitRequestIfNecessary(request, worker, timeoutMs);
-
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
     }
@@ -129,8 +128,8 @@ public class CommunicationUtils {
                 awaitRequestIfNecessary(request2, worker, timeoutMs);
             }
 
-            ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
-            PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
+            final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
+            final PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
             log.info("Read \"{}\" from remote buffer", entry);
 
             return entry.value;
@@ -158,7 +157,7 @@ public class CommunicationUtils {
         }
         if (state(request) != Requests.State.COMPLETE) {
             worker.cancelRequest(request);
-            throw new TimeoutException();
+            throw new TimeoutException("A timeout occurred while receiving data");
         } else {
             Requests.release(request);
         }
@@ -191,8 +190,8 @@ public class CommunicationUtils {
         return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
     }
 
-    public static PlasmaEntry getPlasmaEntryFromBuffer(ByteBuffer objectBuffer) {
-        byte[] data = new byte[objectBuffer.remaining()];
+    public static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) {
+        final byte[] data = new byte[objectBuffer.remaining()];
         objectBuffer.get(data);
         return deserialize(data);
     }
