@@ -3,6 +3,7 @@ package utils;
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
 import de.hhu.bsinfo.infinileap.example.util.Requests;
+import de.hhu.bsinfo.infinileap.util.CloseException;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
@@ -27,31 +28,32 @@ import static utils.HashUtils.generateID;
 @Slf4j
 public class CommunicationUtils {
 
-    public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException {
+    public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException, CloseException {
         final MemorySegment source = MemorySegment.ofArray(object);
-        final MemoryRegion memoryRegion = context.allocateMemory(object.length);
-        memoryRegion.segment().copyFrom(source);
-        return memoryRegion.descriptor();
+        try(final MemoryRegion memoryRegion = context.allocateMemory(object.length)) {
+            memoryRegion.segment().copyFrom(source);
+            return memoryRegion.descriptor();
+        }
     }
 
-    public static Long prepareToSendData(final byte[] data, final long tagID, final Endpoint endpoint) {
+    public static Long prepareToSendData(final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
         log.info("Prepare to send data");
-        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
         final int dataSize = data.length;
 
         final MemorySegment source = MemorySegment.ofArray(data);
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
         buffer.copyFrom(source);
 
-        return endpoint.sendTagged(buffer, Tag.of(tagID), new RequestParameters());
+        return endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters());
+
     }
 
-    public static Long prepareToSendRemoteKey(final byte[] value, final Endpoint endpoint, final Context context) throws ControlException {
+    public static Long prepareToSendRemoteKey(final byte[] value, final Endpoint endpoint, final Context context) throws ControlException, CloseException {
         log.info("Prepare to send remote key");
         final MemoryDescriptor objectAddress;
         try {
             objectAddress = getMemoryDescriptorOfBytes(value, context);
-        } catch (ControlException e) {
+        } catch (ControlException | CloseException e) {
             log.error(e.getMessage());
             throw e;
         }
@@ -94,12 +96,14 @@ public class CommunicationUtils {
         }
     }
 
-    public static void sendSingleMessage(final byte[] data, final long tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
-        final Long request = prepareToSendData(data, tagID, endpoint);
-        sendData(List.of(request), worker, timeoutMs);
+    public static void sendSingleMessage(final byte[] data, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            final Long request = prepareToSendData(data, endpoint, scope);
+            sendData(List.of(request), worker, timeoutMs);
+        }
     }
 
-    public static byte[] receiveData(final int size, final long tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static byte[] receiveData(final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final CommunicationBarrier barrier = new CommunicationBarrier();
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
@@ -107,7 +111,7 @@ public class CommunicationUtils {
             log.info("Receiving message");
 
             RequestParameters requestParameters = new RequestParameters(scope).setReceiveCallback(barrier::release);
-            final long request = worker.receiveTagged(buffer, Tag.of(tagID), requestParameters);
+            final long request = worker.receiveTagged(buffer, Tag.of(0L), requestParameters);
 
             awaitRequestIfNecessary(request, worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
@@ -116,9 +120,9 @@ public class CommunicationUtils {
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
     public static byte[] receiveValue(final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
+        log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-            log.info("Receiving Remote Key");
             final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
 
@@ -163,7 +167,7 @@ public class CommunicationUtils {
         }
     }
 
-    public static ArrayList<Long> prepareToSendKey(String key, Endpoint endpoint) {
+    public static ArrayList<Long> prepareToSendKey(final String key, final Endpoint endpoint, final ResourceScope scope) {
         final ArrayList<Long> requests = new ArrayList<>();
 
         final byte[] keyBytes;
@@ -177,8 +181,8 @@ public class CommunicationUtils {
         final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(keyBytes.length);
         final byte[] keySizeBytes = byteBuffer.array();
 
-        requests.add(prepareToSendData(keySizeBytes, 0L, endpoint));
-        requests.add(prepareToSendData(keyBytes, 0L, endpoint));
+        requests.add(prepareToSendData(keySizeBytes, endpoint, scope));
+        requests.add(prepareToSendData(keyBytes, endpoint, scope));
 
         return requests;
     }

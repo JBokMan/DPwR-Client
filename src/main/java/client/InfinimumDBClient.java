@@ -5,10 +5,12 @@ import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
+import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
+import java.lang.ref.Cleaner;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -69,17 +71,19 @@ public class InfinimumDBClient {
         }
     }
 
-    public void putOperation(final String key, final byte[] value, final Context context, int timeoutMs) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
+    public void putOperation(final String key, final byte[] value, final Context context, final int timeoutMs) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException, CloseException {
         log.info("Starting PUT operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
-        requests.add(prepareToSendData(serialize("PUT"), 0L, endpoint));
-        requests.addAll(prepareToSendKey(key, endpoint));
-        requests.add(prepareToSendRemoteKey(value, endpoint, context));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            requests.add(prepareToSendData(serialize("PUT"), endpoint, scope));
+            requests.addAll(prepareToSendKey(key, endpoint, scope));
+            requests.add(prepareToSendRemoteKey(value, endpoint, context));
 
-        sendData(requests, worker, timeoutMs);
+            sendData(requests, worker, timeoutMs);
+        }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         if ("409".equals(statusCode)) {
@@ -93,18 +97,20 @@ public class InfinimumDBClient {
         log.info("Starting GET operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
-        requests.add(prepareToSendData(serialize("GET"), 0L, endpoint));
-        requests.addAll(prepareToSendKey(key, endpoint));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            requests.add(prepareToSendData(serialize("GET"), endpoint, scope));
+            requests.addAll(prepareToSendKey(key, endpoint, scope));
 
-        sendData(requests, worker, timeoutMs);
+            sendData(requests, worker, timeoutMs);
+        }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         byte[] value = new byte[0];
         if ("200".equals(statusCode)) {
             value = receiveValue(endpoint, worker, timeoutMs);
-            sendSingleMessage(serialize("200"), 0L, endpoint, worker, timeoutMs);
+            sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
 
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
@@ -117,12 +123,14 @@ public class InfinimumDBClient {
         log.info("Starting DEL operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
-        requests.add(prepareToSendData(serialize("DEL"), 0L, endpoint));
-        requests.addAll(prepareToSendKey(key, endpoint));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            requests.add(prepareToSendData(serialize("DEL"), endpoint, scope));
+            requests.addAll(prepareToSendKey(key, endpoint, scope));
 
-        sendData(requests, worker, timeoutMs);
+            sendData(requests, worker, timeoutMs);
+        }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, 0L, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         if ("404".equals(statusCode)) {
