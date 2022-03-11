@@ -95,14 +95,12 @@ public class CommunicationUtils {
     }
 
     public static void sendSingleMessage(final byte[] data, final long tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
-        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
         final Long request = prepareToSendData(data, tagID, endpoint);
         sendData(List.of(request), worker, timeoutMs);
-        scope.close();
     }
 
     public static byte[] receiveData(final int size, final long tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
-        try(final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final CommunicationBarrier barrier = new CommunicationBarrier();
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
 
@@ -119,25 +117,24 @@ public class CommunicationUtils {
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
     public static byte[] receiveValue(final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
-        final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create());
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+            log.info("Receiving Remote Key");
+            final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+            awaitRequestIfNecessary(request, worker, timeoutMs);
 
-        final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-        log.info("Receiving Remote Key");
-        final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
-        awaitRequestIfNecessary(request, worker, timeoutMs);
+            final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
+            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                final long request2 = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+                awaitRequestIfNecessary(request2, worker, timeoutMs);
+            }
 
-        final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
-        try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-            final long request2 = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-            awaitRequestIfNecessary(request2, worker, timeoutMs);
+            ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
+            PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
+            log.info("Read \"{}\" from remote buffer", entry);
+
+            return entry.value;
         }
-
-        ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
-        PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
-        log.info("Read \"{}\" from remote buffer", entry);
-        scope.close();
-
-        return entry.value;
     }
 
     private static void awaitRequestIfNecessary(final long request, final Worker worker, final int timeoutMs) throws TimeoutException {

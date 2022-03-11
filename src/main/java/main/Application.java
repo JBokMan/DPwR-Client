@@ -227,24 +227,21 @@ public final class Application {
         log.debug("End testPutKeyThatAlreadyExistsFails:");
     }
 
-    private static void timeoutTest() {
+    private static void timeoutTest() throws CloseException, NotFoundException, ControlException, TimeoutException {
         log.debug("Start timeoutTest:");
         InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-        String key = "timeout_test_1";
+        String key = "timeout_test";
         byte[] value = serialize("This is a value");
 
         assertThrows(TimeoutException.class, () -> client.put(key, value, 100));
+
         try {
-            TimeUnit.SECONDS.sleep(2);
+            TimeUnit.SECONDS.sleep(3);
         } catch (InterruptedException e) {
             log.error(e.getMessage());
         }
-        assertThrows(TimeoutException.class, () -> client.del(key, timeoutMs));
-        try {
-            TimeUnit.SECONDS.sleep(2);
-        } catch (InterruptedException e) {
-            log.error(e.getMessage());
-        }
+
+        client.del(key, timeoutMs + 2000);
         log.debug("End timeoutTest:");
     }
 
