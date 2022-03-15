@@ -134,7 +134,7 @@ public class CommunicationUtils {
         }
     }
 
-    private static void awaitRequestIfNecessary(final long request, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static void awaitRequestIfNecessary(final long request, final Worker worker, final int timeoutMs) throws TimeoutException {
         if (Status.isError(request)) {
             log.warn("A request has an error status");
         }

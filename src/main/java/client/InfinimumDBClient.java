@@ -5,14 +5,18 @@ import de.hhu.bsinfo.infinileap.util.CloseException;
 import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
+import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
+import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
+import utils.HashUtils;
 
 import java.lang.ref.Cleaner;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -75,22 +79,83 @@ public class InfinimumDBClient {
         log.info("Starting PUT operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
+        PlasmaEntry entry = plasmaEntryOf(key, value);
+        final byte[] entryBytes;
+        try {
+            entryBytes = serialize(entry);
+        } catch (SerializationException e) {
+            log.error(e.getMessage());
+            throw e;
+        }
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(entryBytes.length);
+        final byte[] entrySizeBytes = byteBuffer.array();
+
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             requests.add(prepareToSendData(serialize("PUT"), endpoint, scope));
             requests.addAll(prepareToSendKey(key, endpoint, scope));
-            requests.add(prepareToSendRemoteKey(value, endpoint, context));
-
+            requests.add(prepareToSendData(entrySizeBytes, endpoint, scope));
             sendData(requests, worker, timeoutMs);
         }
 
         final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
-        if ("409".equals(statusCode)) {
+        if ("200".equals(statusCode)) {
+            log.info("Receiving Remote Key");
+            try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+                final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+                final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+                awaitRequestIfNecessary(request, worker, timeoutMs);
+
+                log.info(String.valueOf(descriptor.remoteSize()));
+                final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes.length, scope);
+                sourceBuffer.asByteBuffer().put(entryBytes);
+                try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                    log.info(remoteKey.toString());
+                    final long request2 = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
+                    awaitRequestIfNecessary(request2, worker, timeoutMs);
+                }
+                sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
+            }
+        } else if ("408".equals(statusCode)) {
+            final byte[] idTailEndBytes = SerializationUtils.deserialize(receiveData(4, worker, timeoutMs));
+            final ArrayList<Long> requests2 = new ArrayList<>();
+
+            PlasmaEntry entry2 = plasmaEntryOf(key, value, idTailEndBytes);
+            final byte[] entryBytes2;
+            try {
+                entryBytes2 = serialize(entry2);
+            } catch (SerializationException e) {
+                log.error(e.getMessage());
+                throw e;
+            }
+            final ByteBuffer entryBuffer2 = ByteBuffer.wrap(entryBytes2);
+            log.info("Receiving Remote Key");
+            try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+                final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+                final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+                awaitRequestIfNecessary(request, worker, timeoutMs);
+
+                final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes2.length, scope);
+                sourceBuffer.asByteBuffer().put(entryBytes2);
+                try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                    final long request2 = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+                    awaitRequestIfNecessary(request2, worker, timeoutMs);
+                }
+            }
+            sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
+        } else if ("409".equals(statusCode)) {
             throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
-
         log.info("Put completed\n");
+    }
+
+    private PlasmaEntry plasmaEntryOf(String key, byte[] value, byte[] idTailEndBytes) {
+        return new PlasmaEntry(key, value, HashUtils.generateID(key, idTailEndBytes));
+    }
+
+    private PlasmaEntry plasmaEntryOf(String key, byte[] value) {
+        return new PlasmaEntry(key, value, HashUtils.generateID(key));
     }
 
     private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {

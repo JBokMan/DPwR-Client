@@ -49,4 +49,18 @@ public class HashUtils {
         }
         return sb.toString();
     }
+
+    public static byte[] generateID(String key, byte[] idTailEndBytes) {
+        // Generate plasma object id
+        byte[] id = new byte[0];
+        try {
+            id = getMD5Hash(key);
+        } catch (NoSuchAlgorithmException e) {
+            log.error("The MD5 hash algorithm was not found.", e);
+            //ToDo handle exception
+        }
+        final byte[] fullID = ArrayUtils.addAll(id, idTailEndBytes);
+        log.info("FullID: {} of key: {}", fullID, key);
+        return fullID;
+    }
 }
