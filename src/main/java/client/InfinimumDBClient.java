@@ -58,6 +58,9 @@ public class InfinimumDBClient {
         try (resources) {
             initialize(key);
             putOperation(key, value, context, timeoutMs);
+        } catch (Exception e) {
+            log.error(e.getMessage());
+            throw e;
         }
     }
 
@@ -79,7 +82,7 @@ public class InfinimumDBClient {
         log.info("Starting PUT operation");
         final ArrayList<Long> requests = new ArrayList<>();
 
-        PlasmaEntry entry = plasmaEntryOf(key, value);
+        PlasmaEntry entry = new PlasmaEntry(key, value, new byte[20]);
         final byte[] entryBytes;
         try {
             entryBytes = serialize(entry);
@@ -117,33 +120,6 @@ public class InfinimumDBClient {
                 }
                 sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
             }
-        } else if ("408".equals(statusCode)) {
-            final byte[] idTailEndBytes = SerializationUtils.deserialize(receiveData(4, worker, timeoutMs));
-            final ArrayList<Long> requests2 = new ArrayList<>();
-
-            PlasmaEntry entry2 = plasmaEntryOf(key, value, idTailEndBytes);
-            final byte[] entryBytes2;
-            try {
-                entryBytes2 = serialize(entry2);
-            } catch (SerializationException e) {
-                log.error(e.getMessage());
-                throw e;
-            }
-            final ByteBuffer entryBuffer2 = ByteBuffer.wrap(entryBytes2);
-            log.info("Receiving Remote Key");
-            try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
-                final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-                final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
-                awaitRequestIfNecessary(request, worker, timeoutMs);
-
-                final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes2.length, scope);
-                sourceBuffer.asByteBuffer().put(entryBytes2);
-                try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                    final long request2 = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-                    awaitRequestIfNecessary(request2, worker, timeoutMs);
-                }
-            }
-            sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
         } else if ("409".equals(statusCode)) {
             throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
@@ -152,10 +128,6 @@ public class InfinimumDBClient {
 
     private PlasmaEntry plasmaEntryOf(String key, byte[] value, byte[] idTailEndBytes) {
         return new PlasmaEntry(key, value, HashUtils.generateID(key, idTailEndBytes));
-    }
-
-    private PlasmaEntry plasmaEntryOf(String key, byte[] value) {
-        return new PlasmaEntry(key, value, HashUtils.generateID(key));
     }
 
     private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {

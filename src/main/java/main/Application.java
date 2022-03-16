@@ -241,7 +241,7 @@ public final class Application {
             log.error(e.getMessage());
         }
 
-        client.del(key, timeoutMs + 2000);
+        assertThrows(NotFoundException.class, () -> client.del(key, timeoutMs + 2000));
         log.debug("End timeoutTest:");
     }
 
