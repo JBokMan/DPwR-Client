@@ -1,15 +1,12 @@
 package utils;
 
 import de.hhu.bsinfo.infinileap.binding.*;
-import de.hhu.bsinfo.infinileap.example.util.CommunicationBarrier;
 import de.hhu.bsinfo.infinileap.example.util.Requests;
-import de.hhu.bsinfo.infinileap.util.CloseException;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
-import org.apache.commons.lang3.SerializationException;
 
 import java.lang.ref.Cleaner;
 import java.math.BigInteger;
@@ -28,14 +25,6 @@ import static utils.HashUtils.generateID;
 @Slf4j
 public class CommunicationUtils {
 
-    public static MemoryDescriptor getMemoryDescriptorOfBytes(final byte[] object, final Context context) throws ControlException, CloseException {
-        final MemorySegment source = MemorySegment.ofArray(object);
-        try(final MemoryRegion memoryRegion = context.allocateMemory(object.length)) {
-            memoryRegion.segment().copyFrom(source);
-            return memoryRegion.descriptor();
-        }
-    }
-
     public static Long prepareToSendData(final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
         log.info("Prepare to send data");
         final int dataSize = data.length;
@@ -47,16 +36,30 @@ public class CommunicationUtils {
         return endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters());
     }
 
-    public static Long prepareToSendRemoteKey(final byte[] value, final Endpoint endpoint, final Context context) throws ControlException, CloseException {
-        log.info("Prepare to send remote key");
-        final MemoryDescriptor objectAddress;
-        try {
-            objectAddress = getMemoryDescriptorOfBytes(value, context);
-        } catch (ControlException | CloseException e) {
-            log.error(e.getMessage());
-            throw e;
+    public static void putEntry(final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
+        log.info("Put Entry");
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(worker, timeoutMs, scope);
+            final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
+            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
+                awaitRequestIfNecessary(request, worker, timeoutMs);
+            }
         }
-        return endpoint.sendTagged(objectAddress, Tag.of(0L));
+    }
+
+    public static MemoryDescriptor receiveMemoryDescriptor(final Worker worker, final int timeoutMs, ResourceScope scope) throws TimeoutException {
+        log.info("Receiving Memory Descriptor");
+        final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+        final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+        awaitRequestIfNecessary(request, worker, timeoutMs);
+        return descriptor;
+    }
+
+    private static MemorySegment memorySegmentOfBytes(final byte[] entryBytes, final ResourceScope scope) {
+        final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes.length, scope);
+        sourceBuffer.asByteBuffer().put(entryBytes);
+        return sourceBuffer;
     }
 
     public static void sendData(final List<Long> requests, final Worker worker, final int timeoutMs) throws TimeoutException {
@@ -164,21 +167,18 @@ public class CommunicationUtils {
     public static ArrayList<Long> prepareToSendKey(final String key, final Endpoint endpoint, final ResourceScope scope) {
         final ArrayList<Long> requests = new ArrayList<>();
 
-        final byte[] keyBytes;
-        try {
-            keyBytes = serialize(key);
-        } catch (SerializationException e) {
-            log.error(e.getMessage());
-            throw e;
-        }
-
-        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(keyBytes.length);
-        final byte[] keySizeBytes = byteBuffer.array();
+        final byte[] keyBytes = serialize(key);
+        final byte[] keySizeBytes = getLengthAsBytes(keyBytes);
 
         requests.add(prepareToSendData(keySizeBytes, endpoint, scope));
         requests.add(prepareToSendData(keyBytes, endpoint, scope));
 
         return requests;
+    }
+
+    public static byte[] getLengthAsBytes(final byte[] object) {
+        final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(object.length);
+        return byteBuffer.array();
     }
 
     public static Integer getResponsibleServerID(final String key, final int serverCount) {
