@@ -50,27 +50,39 @@ public class InfinimumDBClient {
         //TODO implement
     }
 
-    public void put(final String key, final byte[] value, final int timeoutMs) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+    public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
         try (resources) {
             initialize(key);
             putOperation(key, value, timeoutMs);
-        } catch (Exception e) {
-            log.error(e.getMessage());
-            throw e;
+        } catch (CloseException | ControlException | TimeoutException e) {
+            if (maxAttempts == 1) {
+                throw e;
+            }
+            put(key, value, timeoutMs, maxAttempts - 1);
         }
     }
 
-    public byte[] get(final String key, final int timeoutMs) throws CloseException, NotFoundException, ControlException, TimeoutException {
+    public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
         try (resources) {
             initialize(key);
             return getOperation(key, timeoutMs);
+        } catch (CloseException | ControlException | TimeoutException e) {
+            if (maxAttempts == 1) {
+                throw e;
+            }
+            return get(key, timeoutMs, maxAttempts - 1);
         }
     }
 
-    public void del(final String key, final int timeoutMs) throws CloseException, NotFoundException, ControlException, TimeoutException {
+    public void del(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
         try (resources) {
             initialize(key);
             delOperation(key, timeoutMs);
+        } catch (CloseException | ControlException | TimeoutException e) {
+            if (maxAttempts == 1) {
+                throw e;
+            }
+            del(key, timeoutMs, maxAttempts - 1);
         }
     }
 
