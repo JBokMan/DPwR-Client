@@ -37,7 +37,7 @@ public class InfinimumDBClient {
         setupServerConnection(serverHostAddress, serverPort);
         try {
             testServerConnection();
-        } catch (ConnectException e) {
+        } catch (final ConnectException e) {
             log.error("InfinimumDB-Server could not be reached");
         }
     }
@@ -54,7 +54,7 @@ public class InfinimumDBClient {
         try (resources) {
             initialize(key);
             putOperation(key, value, timeoutMs);
-        } catch (CloseException | ControlException | TimeoutException e) {
+        } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -66,7 +66,7 @@ public class InfinimumDBClient {
         try (resources) {
             initialize(key);
             return getOperation(key, timeoutMs);
-        } catch (CloseException | ControlException | TimeoutException e) {
+        } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -78,7 +78,7 @@ public class InfinimumDBClient {
         try (resources) {
             initialize(key);
             delOperation(key, timeoutMs);
-        } catch (CloseException | ControlException | TimeoutException e) {
+        } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -88,24 +88,25 @@ public class InfinimumDBClient {
 
     public void putOperation(final String key, final byte[] value, final int timeoutMs) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
         log.info("Starting PUT operation");
+        final int tagID = receiveTagID(worker, timeoutMs);
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
         final byte[] entrySizeBytes = getLengthAsBytes(entryBytes);
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendData(serialize("PUT"), endpoint, scope));
-            requests.addAll(prepareToSendKey(key, endpoint, scope));
-            requests.add(prepareToSendData(entrySizeBytes, endpoint, scope));
+            requests.add(prepareToSendData(tagID, serialize("PUT"), endpoint, scope));
+            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+            requests.add(prepareToSendData(tagID, entrySizeBytes, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         if ("200".equals(statusCode)) {
-            putEntry(entryBytes, worker, endpoint, timeoutMs);
-            sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
+            putEntry(tagID, entryBytes, worker, endpoint, timeoutMs);
+            sendSingleMessage(tagID, serialize("200"), endpoint, worker, timeoutMs);
         } else if ("409".equals(statusCode)) {
             throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
@@ -115,21 +116,22 @@ public class InfinimumDBClient {
 
     private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {
         log.info("Starting GET operation");
+        final int tagID = receiveTagID(worker, timeoutMs);
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendData(serialize("GET"), endpoint, scope));
-            requests.addAll(prepareToSendKey(key, endpoint, scope));
+            requests.add(prepareToSendData(tagID, serialize("GET"), endpoint, scope));
+            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         byte[] value = new byte[0];
         if ("200".equals(statusCode)) {
-            value = receiveValue(endpoint, worker, timeoutMs);
-            sendSingleMessage(serialize("200"), endpoint, worker, timeoutMs);
+            value = receiveValue(tagID, endpoint, worker, timeoutMs);
+            sendSingleMessage(tagID, serialize("200"), endpoint, worker, timeoutMs);
 
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
@@ -140,16 +142,17 @@ public class InfinimumDBClient {
 
     private void delOperation(final String key, final int timeoutMs) throws NotFoundException, TimeoutException {
         log.info("Starting DEL operation");
+        final int tagID = receiveTagID(worker, timeoutMs);
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
-            requests.add(prepareToSendData(serialize("DEL"), endpoint, scope));
-            requests.addAll(prepareToSendKey(key, endpoint, scope));
+            requests.add(prepareToSendData(tagID, serialize("DEL"), endpoint, scope));
+            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(10, worker, timeoutMs));
+        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
         log.info("Received status code: \"{}\"", statusCode);
 
         if ("404".equals(statusCode)) {
@@ -170,7 +173,7 @@ public class InfinimumDBClient {
 
         // Initialize UCP context
         log.info("Initializing context");
-        Context context = pushResource(Context.initialize(contextParameters, configuration));
+        final Context context = pushResource(Context.initialize(contextParameters, configuration));
         final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
 
         // Create a worker

@@ -25,7 +25,7 @@ import static utils.HashUtils.generateID;
 @Slf4j
 public class CommunicationUtils {
 
-    public static Long prepareToSendData(final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
+    public static Long prepareToSendData(final int tagID, final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
         log.info("Prepare to send data");
         final int dataSize = data.length;
 
@@ -33,13 +33,13 @@ public class CommunicationUtils {
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
         buffer.copyFrom(source);
 
-        return endpoint.sendTagged(buffer, Tag.of(0L), new RequestParameters());
+        return endpoint.sendTagged(buffer, Tag.of(tagID), new RequestParameters());
     }
 
-    public static void putEntry(final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
+    public static void putEntry(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
         log.info("Put Entry");
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
-            final MemoryDescriptor descriptor = receiveMemoryDescriptor(worker, timeoutMs, scope);
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
             final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
                 final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
@@ -48,10 +48,10 @@ public class CommunicationUtils {
         }
     }
 
-    public static MemoryDescriptor receiveMemoryDescriptor(final Worker worker, final int timeoutMs, ResourceScope scope) throws TimeoutException {
+    public static MemoryDescriptor receiveMemoryDescriptor(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
         log.info("Receiving Memory Descriptor");
         final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-        final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+        final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
         awaitRequestIfNecessary(request, worker, timeoutMs);
         return descriptor;
     }
@@ -73,11 +73,11 @@ public class CommunicationUtils {
                 while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
                     worker.progress();
                     try {
-                        TimeUnit timeUnit = TimeUnit.MILLISECONDS;
+                        final TimeUnit timeUnit = TimeUnit.MILLISECONDS;
                         synchronized (timeUnit) {
                             timeUnit.wait(1);
                         }
-                    } catch (InterruptedException e) {
+                    } catch (final InterruptedException e) {
                         log.error(e.getMessage());
                         worker.cancelRequest(request);
                         timeoutHappened = true;
@@ -98,29 +98,29 @@ public class CommunicationUtils {
         }
     }
 
-    public static void sendSingleMessage(final byte[] data, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static void sendSingleMessage(final int tagID, final byte[] data, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
-            final Long request = prepareToSendData(data, endpoint, scope);
+            final Long request = prepareToSendData(tagID, data, endpoint, scope);
             sendData(List.of(request), worker, timeoutMs);
         }
     }
 
-    public static byte[] receiveData(final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static byte[] receiveData(final int tagID, final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
         log.info("Receiving message");
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
-            final long request = worker.receiveTagged(buffer, Tag.of(0L), new RequestParameters(scope));
+            final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
-    public static byte[] receiveValue(final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
+    public static byte[] receiveValue(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
         log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
             final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-            final long request = worker.receiveTagged(descriptor, Tag.of(0L), new RequestParameters(scope));
+            final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
 
             final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
@@ -145,11 +145,11 @@ public class CommunicationUtils {
         while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
             worker.progress();
             try {
-                TimeUnit timeUnit = TimeUnit.MILLISECONDS;
+                final TimeUnit timeUnit = TimeUnit.MILLISECONDS;
                 synchronized (timeUnit) {
                     timeUnit.wait(1);
                 }
-            } catch (InterruptedException e) {
+            } catch (final InterruptedException e) {
                 log.error(e.getMessage());
                 worker.cancelRequest(request);
                 return;
@@ -164,14 +164,22 @@ public class CommunicationUtils {
         }
     }
 
-    public static ArrayList<Long> prepareToSendKey(final String key, final Endpoint endpoint, final ResourceScope scope) {
+    public static int receiveTagID(final Worker worker, final int timeoutMs) throws TimeoutException {
+        final byte[] tagIDBytes = receiveData(0, Integer.BYTES, worker, timeoutMs);
+        final ByteBuffer byteBuffer = ByteBuffer.wrap(tagIDBytes);
+        final int tagID = byteBuffer.getInt();
+        log.info("Received \"{}\"", tagID);
+        return tagID;
+    }
+
+    public static ArrayList<Long> prepareToSendKey(final int tagID, final String key, final Endpoint endpoint, final ResourceScope scope) {
         final ArrayList<Long> requests = new ArrayList<>();
 
         final byte[] keyBytes = serialize(key);
         final byte[] keySizeBytes = getLengthAsBytes(keyBytes);
 
-        requests.add(prepareToSendData(keySizeBytes, endpoint, scope));
-        requests.add(prepareToSendData(keyBytes, endpoint, scope));
+        requests.add(prepareToSendData(tagID, keySizeBytes, endpoint, scope));
+        requests.add(prepareToSendData(tagID, keyBytes, endpoint, scope));
 
         return requests;
     }
