@@ -186,7 +186,7 @@ public class InfinimumDBClient {
 
         // Creating Endpoint
         log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
-        this.endpoint = worker.createEndpoint(endpointParams);
+        this.endpoint = pushResource(worker.createEndpoint(endpointParams));
     }
 
     protected <T extends AutoCloseable> T pushResource(final T resource) {
