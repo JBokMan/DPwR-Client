@@ -20,7 +20,7 @@ public final class Application {
 
     private static final String serverHostAddress = "localhost";
     private static final Integer serverPort = 2998;
-    private static final Integer timeoutMs = 5000;
+    private static final Integer timeoutMs = 500;
     private static final Integer putAttempts = 5;
     private static final Integer getAttempts = 5;
     private static final Integer delAttempts = 5;

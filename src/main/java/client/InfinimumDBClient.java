@@ -92,7 +92,7 @@ public class InfinimumDBClient {
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
         final byte[] entrySizeBytes = getLengthAsBytes(entryBytes);
 
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final ArrayList<Long> requests = new ArrayList<>();
             requests.add(prepareToSendData(tagID, serialize("PUT"), endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
