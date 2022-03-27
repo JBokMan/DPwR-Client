@@ -25,7 +25,7 @@ public final class Application {
     private static final Integer getAttempts = 5;
     private static final Integer delAttempts = 5;
 
-    public static void main(final String... args) throws CloseException, NotFoundException, ControlException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    public static void main(final String... args) throws CloseException, NotFoundException, ControlException, DuplicateKeyException, TimeoutException {
         testCanPutAndGetObject();
         testTwoKeyValuesWork();
         testTwoKeysWithCollidingHash();
@@ -35,10 +35,11 @@ public final class Application {
         testThreeKeysWithCollidingHashDeletingInOrder3();
         testPutKeyThatAlreadyExistsFails();
         timeoutTest();
-        test1000KeyValues();
+        testCanPutMultipleTimes(10000, 0);
+        testMultipleConnections();
     }
 
-    private static void testCanPutAndGetObject() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testCanPutAndGetObject() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testCanPutAndGetObject:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -53,7 +54,7 @@ public final class Application {
         log.debug("End testCanPutAndGetObject:");
     }
 
-    private static void testTwoKeyValuesWork() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testTwoKeyValuesWork() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testTwoKeyValuesWork:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -74,7 +75,7 @@ public final class Application {
         log.debug("End testTwoKeyValuesWork:");
     }
 
-    private static void testTwoKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testTwoKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testTwoKeysWithCollidingHash:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -95,7 +96,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testThreeKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHash:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -122,7 +123,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHash:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -152,7 +153,7 @@ public final class Application {
         log.debug("End testTwoKeysWithCollidingHashCanBePut:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -182,7 +183,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder2:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -212,7 +213,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder3:");
     }
 
-    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, ControlException, DuplicateKeyException, NotFoundException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, ControlException, DuplicateKeyException, NotFoundException, TimeoutException {
         log.debug("Start testPutKeyThatAlreadyExistsFails:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -230,7 +231,7 @@ public final class Application {
         log.debug("End testPutKeyThatAlreadyExistsFails:");
     }
 
-    private static void timeoutTest() throws CloseException, NotFoundException, ControlException, TimeoutException {
+    private static void timeoutTest() {
         log.debug("Start timeoutTest:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
@@ -248,45 +249,75 @@ public final class Application {
         log.debug("End timeoutTest:");
     }
 
-    private static void test1000KeyValues() throws CloseException, NotFoundException, ControlException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
-        testCanPut1000Times();
-        testCanGet1000Times();
-        testCanDelete1000Times();
+    private static void testMultipleKeyValues(final int count, final int startIndex) throws CloseException, NotFoundException, ControlException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+        testCanPutMultipleTimes(count, startIndex);
+        testCanGetMultipleTimes(count, startIndex);
+        testCanDeleteMultipleTimes(count, startIndex);
     }
 
-    private static void testCanPut1000Times() throws CloseException, ControlException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
-        log.debug("Start testCanPut1000Times:");
+    private static void testCanPutMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+        log.debug("Start testCanPutMultipleTimes:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
-        for (int i = 0; i < 1000; i++) {
+        for (int i = startIndex; i < count; i++) {
             final String key = "This is a key" + i;
             final byte[] value = serialize("This is a value" + i);
             client.put(key, value, timeoutMs, putAttempts);
         }
-        log.debug("End testCanPut1000Times:");
+        log.debug("End testCanPutMultipleTimes:");
     }
 
-    private static void testCanGet1000Times() throws CloseException, ControlException, NotFoundException, ExecutionException, InterruptedException, TimeoutException {
-        log.debug("Start testCanGet1000Times:");
+    private static void testCanGetMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, NotFoundException, TimeoutException {
+        log.debug("Start testCanGetMultipleTimes:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
-        for (int i = 0; i < 1000; i++) {
-            final String key = "This is a key" + i;
-            final byte[] value = serialize("This is a value" + i);
-            final byte[] response = client.get(key, timeoutMs, getAttempts);
-            assertArrayEquals(value, response);
+        for (int j = 0; j < 10; j++) {
+            for (int i = startIndex; i < count; i++) {
+                final String key = "This is a key" + i;
+                final byte[] value = serialize("This is a value" + i);
+                final byte[] response = client.get(key, timeoutMs, getAttempts);
+                assertArrayEquals(value, response);
+            }
         }
-        log.debug("End testCanGet1000Times:");
+        log.debug("End testCanGetMultipleTimes:");
     }
 
-    private static void testCanDelete1000Times() throws CloseException, ControlException, NotFoundException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testCanDeleteMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, NotFoundException, TimeoutException, DuplicateKeyException {
         log.debug("Start testCanDelete1000Times:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-
-        for (int i = 0; i < 1000; i++) {
-            final String key = "This is a key" + i;
-            client.del(key, timeoutMs, delAttempts);
+        for (int j = 0; j < 10; j++) {
+            testCanPutMultipleTimes(0, startIndex);
+            for (int i = startIndex; i < count; i++) {
+                final String key = "This is a key" + i;
+                client.del(key, timeoutMs, delAttempts);
+            }
         }
+
         log.debug("End testCanDelete1000Times:");
+    }
+
+    private static void testMultipleConnections() {
+        log.debug("Start testMultipleConnections:");
+
+        final Thread thread1 = new Thread(() -> {
+            try {
+                testMultipleKeyValues(10000, 10000);
+            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | ExecutionException | InterruptedException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
+
+        final Thread thread2 = new Thread(() -> {
+            try {
+                testMultipleKeyValues(10000, 20000);
+            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | ExecutionException | InterruptedException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
+
+        thread1.start();
+        thread2.start();
+
+        log.debug("End testMultipleConnections:");
     }
 }
