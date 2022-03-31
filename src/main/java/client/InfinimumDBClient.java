@@ -29,8 +29,7 @@ public class InfinimumDBClient {
     private transient Worker worker;
     private transient Endpoint endpoint;
 
-    private static final long DEFAULT_REQUEST_SIZE = 1024;
-    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.WAKEUP, ContextParameters.Feature.AM, ContextParameters.Feature.ATOMIC_32, ContextParameters.Feature.ATOMIC_64, ContextParameters.Feature.STREAM};
+    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
 
     public InfinimumDBClient(final String serverHostAddress, final Integer serverPort) {
         this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
@@ -165,19 +164,14 @@ public class InfinimumDBClient {
         NativeLogger.enable();
         log.info("Using UCX version {}", Context.getVersion());
 
-        // Create context parameters
-        final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET).setRequestSize(DEFAULT_REQUEST_SIZE);
-
-        // Read configuration (Environment Variables)
-        final Configuration configuration = pushResource(Configuration.read());
-
         // Initialize UCP context
         log.info("Initializing context");
-        final Context context = pushResource(Context.initialize(contextParameters, configuration));
-        final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
+        final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET);
+        final Context context = pushResource(Context.initialize(contextParameters, null));
 
         // Create a worker
         log.info("Creating worker");
+        final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
         this.worker = pushResource(context.createWorker(workerParameters));
 
         // Determining responsible server
