@@ -1,10 +1,14 @@
 package main;
 
 import client.InfinimumDBClient;
+import de.hhu.bsinfo.infinileap.binding.ControlException;
+import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Random;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
@@ -41,6 +45,7 @@ public final class Application {
         testMultipleKeyValues(1000, 0);
         testTwoClientsMultipleKeyValues();
         testThreeClientsMultipleKeyValues();
+        testStress();
     }
 
     private static void testCanConnectToServer() {
@@ -389,27 +394,89 @@ public final class Application {
 
     private static void testTwoClientsMultipleKeyValues() {
         log.debug("Start testTwoClientsMultipleKeyValues:");
+        final CountDownLatch latch = new CountDownLatch(2);
 
-        final Thread thread1 = new Thread(() -> testMultipleKeyValues(1000, 0));
-        final Thread thread2 = new Thread(() -> testMultipleKeyValues(1000, 1000));
+        final Thread thread1 = new Thread(() -> {
+            testMultipleKeyValues(1000, 1000);
+            latch.countDown();
+        });
+        final Thread thread2 = new Thread(() -> {
+            testMultipleKeyValues(1000, 2000);
+            latch.countDown();
+        });
 
         thread1.start();
         thread2.start();
+
+        assertDoesNotThrow(() -> latch.await());
 
         log.debug("End testTwoClientsMultipleKeyValues:");
     }
 
     private static void testThreeClientsMultipleKeyValues() {
         log.debug("Start testThreeClientsMultipleKeyValues:");
+        final CountDownLatch latch = new CountDownLatch(3);
 
-        final Thread thread1 = new Thread(() -> testMultipleKeyValues(1000, 0));
-        final Thread thread2 = new Thread(() -> testMultipleKeyValues(1000, 1000));
-        final Thread thread3 = new Thread(() -> testMultipleKeyValues(1000, 2000));
+        final Thread thread1 = new Thread(() -> {
+            testMultipleKeyValues(1000, 3000);
+            latch.countDown();
+        });
+        final Thread thread2 = new Thread(() -> {
+            testMultipleKeyValues(1000, 4000);
+            latch.countDown();
+        });
+        final Thread thread3 = new Thread(() -> {
+            testMultipleKeyValues(1000, 5000);
+            latch.countDown();
+        });
 
         thread1.start();
         thread2.start();
         thread3.start();
 
+        assertDoesNotThrow(() -> latch.await());
+
         log.debug("End testThreeClientsMultipleKeyValues:");
     }
+
+    private static void testStress() {
+        log.debug("Start testStress:");
+        final CountDownLatch latch = new CountDownLatch(4);
+
+        final Thread thread1 = new Thread(() -> stress(50, 1000, latch));
+        final Thread thread2 = new Thread(() -> stress(50, 1000, latch));
+        final Thread thread3 = new Thread(() -> stress(50, 1000, latch));
+        final Thread thread4 = new Thread(() -> stress(50, 1000, latch));
+
+        thread1.start();
+        thread2.start();
+        thread3.start();
+        thread4.start();
+
+        assertDoesNotThrow(() -> latch.await());
+
+        log.debug("End testStress:");
+    }
+
+    private static void stress(final int range, final int count, final CountDownLatch latch) {
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final Random random = new Random();
+        for (int i = 0; i < count; i++) {
+            final int index = random.ints(0, range).findFirst().getAsInt();
+            final String key = "This is a key" + index;
+            final byte[] value = serialize("This is a value" + index);
+            final int operationNumber = random.ints(0, 3).findFirst().getAsInt();
+            try {
+                switch (operationNumber) {
+                    case 0 -> client.put(key, value, timeoutMs, putAttempts);
+                    case 1 -> client.get(key, timeoutMs, getAttempts);
+                    case 2 -> client.del(key, timeoutMs, delAttempts);
+                }
+            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        }
+        latch.countDown();
+    }
+
 }
