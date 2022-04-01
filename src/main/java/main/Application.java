@@ -1,19 +1,14 @@
 package main;
 
 import client.InfinimumDBClient;
-import de.hhu.bsinfo.infinileap.binding.ControlException;
-import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
-import static org.junit.jupiter.api.Assertions.assertArrayEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.*;
 
 @Slf4j
 public final class Application {
@@ -25,106 +20,168 @@ public final class Application {
     private static final Integer getAttempts = 5;
     private static final Integer delAttempts = 5;
 
-    public static void main(final String... args) throws CloseException, NotFoundException, ControlException, DuplicateKeyException, TimeoutException {
-        testCanPutAndGetObject();
-        testTwoKeyValuesWork();
-        testTwoKeysWithCollidingHash();
-        testThreeKeysWithCollidingHash();
+    public static void main(final String... args) {
+        testCanConnectToServer();
+        testSuccessfulPut();
+        testUnsuccessfulPut();
+        testSuccessfulGet();
+        testUnsuccessfulGet();
+        testSuccessfulDelete();
+        testUnsuccessfulDelete();
+        testCanPutGetAndDeleteObject();
+        testTwoKeyValues();
+        testTwoKeyValuesWithCollidingHash();
+        testThreeKeyValuesWithCollidingHash();
         testThreeKeysWithCollidingHashDeletingInOrder1();
         testThreeKeysWithCollidingHashDeletingInOrder2();
         testThreeKeysWithCollidingHashDeletingInOrder3();
-        testPutKeyThatAlreadyExistsFails();
-        timeoutTest();
-        testCanPutMultipleTimes(10000, 0);
-        testMultipleConnections();
+        testPutTimeout();
+        testGetTimeout();
+        testDeleteTimeout();
+        testMultipleKeyValues(1000, 0);
+        testTwoClientsMultipleKeyValues();
+        testThreeClientsMultipleKeyValues();
     }
 
-    private static void testCanPutAndGetObject() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
-        log.debug("Start testCanPutAndGetObject:");
+    private static void testCanConnectToServer() {
+        log.debug("Start testCanConnectToServer:");
+        assertDoesNotThrow(() -> new InfinimumDBClient(serverHostAddress, serverPort));
+        log.debug("End testCanConnectToServer:");
+    }
+
+    private static void testSuccessfulPut() {
+        log.debug("Start testSuccessfulPut:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        final byte[] response = client.get(key, timeoutMs, getAttempts);
+        assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
 
-        assertArrayEquals(value, response);
-
-        client.del(key, timeoutMs, delAttempts);
-        log.debug("End testCanPutAndGetObject:");
+        log.debug("End testSuccessfulPut:");
     }
 
-    private static void testTwoKeyValuesWork() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
-        log.debug("Start testTwoKeyValuesWork:");
+    private static void testUnsuccessfulPut() {
+        log.debug("Start testUnsuccessfulPut:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key";
+        final byte[] value = serialize("This is a value");
+
+        assertThrows(DuplicateKeyException.class, () -> client.put(key, value, timeoutMs, putAttempts));
+
+        log.debug("End testUnsuccessfulPut:");
+    }
+
+    private static void testSuccessfulGet() {
+        log.debug("Start testSuccessfulGet:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key";
+        final byte[] value = serialize("This is a value");
+
+        assertDoesNotThrow(() -> {
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+        });
+
+        log.debug("End testSuccessfulGet:");
+    }
+
+    private static void testUnsuccessfulGet() {
+        log.debug("Start testSuccessfulGet:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key1";
+
+        assertThrows(NotFoundException.class, () -> client.get(key, timeoutMs, getAttempts));
+
+        log.debug("End testSuccessfulGet:");
+    }
+
+    private static void testSuccessfulDelete() {
+        log.debug("Start testSuccessfulDelete:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key";
+
+        assertDoesNotThrow(() -> client.del(key, timeoutMs, delAttempts));
+
+        log.debug("End testSuccessfulDelete:");
+    }
+
+    private static void testUnsuccessfulDelete() {
+        log.debug("Start testUnsuccessfulDelete:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key";
+
+        assertThrows(NotFoundException.class, () -> client.del(key, timeoutMs, delAttempts));
+
+        log.debug("End testUnsuccessfulDelete:");
+    }
+
+
+    private static void testCanPutGetAndDeleteObject() {
+        log.debug("Start testCanPutGetAndDeleteObject:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "This is a key";
+        final byte[] value = serialize("This is a value");
+
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            client.del(key, timeoutMs, delAttempts);
+        });
+
+        log.debug("End testCanPutGetAndDeleteObject:");
+    }
+
+    private static void testTwoKeyValues() {
+        log.debug("Start testTwoKeyValues:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
         final String key2 = "This is a key2";
         final byte[] value2 = serialize("This is a value2");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        final byte[] response = client.get(key, timeoutMs, getAttempts);
-        final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
 
-        assertArrayEquals(value, response);
-        assertArrayEquals(value2, response2);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
 
-        client.del(key, timeoutMs, delAttempts);
-        client.del(key2, timeoutMs, delAttempts);
-        log.debug("End testTwoKeyValuesWork:");
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+        });
+
+        log.debug("End testTwoKeyValues:");
     }
 
-    private static void testTwoKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
-        log.debug("Start testTwoKeysWithCollidingHash:");
+    private static void testTwoKeyValuesWithCollidingHash() {
+        log.debug("Start testTwoKeyValuesWithCollidingHash:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
         final byte[] value2 = serialize("This is a value2");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        final byte[] response = client.get(key, timeoutMs, getAttempts);
-        final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
 
-        assertArrayEquals(value, response);
-        assertArrayEquals(value2, response2);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
 
-        client.del(key, timeoutMs, delAttempts);
-        client.del(key2, timeoutMs, delAttempts);
-        log.debug("End testTwoKeysWithCollidingHashCanBePut:");
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+        });
+
+        log.debug("End testTwoKeyValuesWithCollidingHash:");
     }
 
-    private static void testThreeKeysWithCollidingHash() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
-        log.debug("Start testThreeKeysWithCollidingHash:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-        final String key = "hash_collision_test_1";
-        final byte[] value = serialize("This is a value");
-        final String key2 = "hash_collision_test_2";
-        final byte[] value2 = serialize("This is a value2");
-        final String key3 = "hash_collision_test_3";
-        final byte[] value3 = serialize("This is a value3");
-
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        client.put(key3, value3, timeoutMs, putAttempts);
-        final byte[] response = client.get(key, timeoutMs, getAttempts);
-        final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-        final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
-
-        assertArrayEquals(value, response);
-        assertArrayEquals(value2, response2);
-        assertArrayEquals(value3, response3);
-
-        client.del(key, timeoutMs, delAttempts);
-        client.del(key2, timeoutMs, delAttempts);
-        client.del(key3, timeoutMs, delAttempts);
-        log.debug("End testTwoKeysWithCollidingHashCanBePut:");
-    }
-
-    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
-        log.debug("Start testThreeKeysWithCollidingHash:");
+    private static void testThreeKeyValuesWithCollidingHash() {
+        log.debug("Start testThreeKeyValuesWithCollidingHash:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
@@ -133,27 +190,60 @@ public final class Application {
         final String key3 = "hash_collision_test_3";
         final byte[] value3 = serialize("This is a value3");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        client.put(key3, value3, timeoutMs, putAttempts);
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
 
-        client.del(key, timeoutMs, delAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
+            assertArrayEquals(value3, response3);
 
-        final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-        byte[] response3 = client.get(key3, timeoutMs, getAttempts);
-        assertArrayEquals(value2, response2);
-        assertArrayEquals(value3, response3);
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
+        });
 
-        client.del(key2, timeoutMs, delAttempts);
-
-        response3 = client.get(key3, timeoutMs, getAttempts);
-        assertArrayEquals(value3, response3);
-
-        client.del(key3, timeoutMs, delAttempts);
-        log.debug("End testTwoKeysWithCollidingHashCanBePut:");
+        log.debug("End testThreeKeyValuesWithCollidingHash:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder1() {
+        log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder1:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "hash_collision_test_1";
+        final byte[] value = serialize("This is a value");
+        final String key2 = "hash_collision_test_2";
+        final byte[] value2 = serialize("This is a value2");
+        final String key3 = "hash_collision_test_3";
+        final byte[] value3 = serialize("This is a value3");
+
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+
+            client.del(key, timeoutMs, delAttempts);
+
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value2, response2);
+            assertArrayEquals(value3, response3);
+
+            client.del(key2, timeoutMs, delAttempts);
+
+            response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value3, response3);
+
+            client.del(key3, timeoutMs, delAttempts);
+        });
+
+        log.debug("End testThreeKeysWithCollidingHashDeletingInOrder1:");
+    }
+
+    private static void testThreeKeysWithCollidingHashDeletingInOrder2() {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -163,27 +253,30 @@ public final class Application {
         final String key3 = "hash_collision_test_3";
         final byte[] value3 = serialize("This is a value3");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        client.put(key3, value3, timeoutMs, putAttempts);
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
 
-        client.del(key3, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
 
-        byte[] response = client.get(key, timeoutMs, getAttempts);
-        final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-        assertArrayEquals(value, response);
-        assertArrayEquals(value2, response2);
+            byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
 
-        client.del(key2, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
 
-        response = client.get(key, timeoutMs, getAttempts);
-        assertArrayEquals(value, response);
+            response = client.get(key, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
 
-        client.del(key, timeoutMs, delAttempts);
+            client.del(key, timeoutMs, delAttempts);
+        });
+
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder2:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, ControlException, NotFoundException, DuplicateKeyException, TimeoutException {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder3() {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -193,131 +286,130 @@ public final class Application {
         final String key3 = "hash_collision_test_3";
         final byte[] value3 = serialize("This is a value3");
 
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        client.put(key3, value3, timeoutMs, putAttempts);
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
 
-        client.del(key2, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
 
-        byte[] response = client.get(key, timeoutMs, getAttempts);
-        final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
-        assertArrayEquals(value, response);
-        assertArrayEquals(value3, response3);
+            byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value3, response3);
 
-        client.del(key3, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
 
-        response = client.get(key, timeoutMs, getAttempts);
-        assertArrayEquals(value, response);
+            response = client.get(key, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
 
-        client.del(key, timeoutMs, delAttempts);
+            client.del(key, timeoutMs, delAttempts);
+        });
+
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder3:");
     }
 
-    private static void testPutKeyThatAlreadyExistsFails() throws CloseException, ControlException, DuplicateKeyException, NotFoundException, TimeoutException {
-        log.debug("Start testPutKeyThatAlreadyExistsFails:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-        final String key = "hash_collision_test_1";
-        final byte[] value = serialize("This is a value");
-        final String key2 = "hash_collision_test_2";
-        final byte[] value2 = serialize("This is a value2");
-        final byte[] value3 = serialize("This is a value3");
-
-        client.put(key, value, timeoutMs, putAttempts);
-        client.put(key2, value2, timeoutMs, putAttempts);
-        assertThrows(DuplicateKeyException.class, () -> client.put(key2, value3, timeoutMs, putAttempts));
-
-        client.del(key, timeoutMs, delAttempts);
-        client.del(key2, timeoutMs, delAttempts);
-        log.debug("End testPutKeyThatAlreadyExistsFails:");
-    }
-
-    private static void timeoutTest() {
-        log.debug("Start timeoutTest:");
+    private static void testPutTimeout() {
+        log.debug("Start testPutTimeout:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
         final byte[] value = serialize("This is a value");
 
         assertThrows(TimeoutException.class, () -> client.put(key, value, 100, putAttempts));
 
-        try {
-            TimeUnit.SECONDS.sleep(3);
-        } catch (final InterruptedException e) {
-            log.error(e.getMessage());
-        }
-
-        assertThrows(NotFoundException.class, () -> client.del(key, timeoutMs + 2000, delAttempts));
-        log.debug("End timeoutTest:");
+        log.debug("End testPutTimeout:");
     }
 
-    private static void testMultipleKeyValues(final int count, final int startIndex) throws CloseException, NotFoundException, ControlException, DuplicateKeyException, ExecutionException, InterruptedException, TimeoutException {
+    private static void testGetTimeout() {
+        log.debug("Start testGetTimeout:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "timeout_test";
+
+        assertThrows(TimeoutException.class, () -> client.get(key, 100, getAttempts));
+
+        log.debug("End testGetTimeout:");
+    }
+
+    private static void testDeleteTimeout() {
+        log.debug("Start testDeleteTimeout:");
+        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final String key = "timeout_test";
+
+        assertThrows(TimeoutException.class, () -> client.del(key, 100, delAttempts));
+
+        log.debug("End testDeleteTimeout:");
+    }
+
+    private static void testMultipleKeyValues(final int count, final int startIndex) {
         testCanPutMultipleTimes(count, startIndex);
         testCanGetMultipleTimes(count, startIndex);
         testCanDeleteMultipleTimes(count, startIndex);
     }
 
-    private static void testCanPutMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+    private static void testCanPutMultipleTimes(final int count, final int startIndex) {
         log.debug("Start testCanPutMultipleTimes:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
-        for (int i = startIndex; i < count; i++) {
+        for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
             final byte[] value = serialize("This is a value" + i);
-            client.put(key, value, timeoutMs, putAttempts);
+            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
         }
+
         log.debug("End testCanPutMultipleTimes:");
     }
 
-    private static void testCanGetMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, NotFoundException, TimeoutException {
+    private static void testCanGetMultipleTimes(final int count, final int startIndex) {
         log.debug("Start testCanGetMultipleTimes:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
 
-        for (int j = 0; j < 10; j++) {
-            for (int i = startIndex; i < count; i++) {
-                final String key = "This is a key" + i;
-                final byte[] value = serialize("This is a value" + i);
+        for (int i = startIndex; i < startIndex + count; i++) {
+            final String key = "This is a key" + i;
+            final byte[] value = serialize("This is a value" + i);
+            assertDoesNotThrow(() -> {
                 final byte[] response = client.get(key, timeoutMs, getAttempts);
                 assertArrayEquals(value, response);
-            }
+            });
         }
+
         log.debug("End testCanGetMultipleTimes:");
     }
 
-    private static void testCanDeleteMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, NotFoundException, TimeoutException, DuplicateKeyException {
-        log.debug("Start testCanDelete1000Times:");
+    private static void testCanDeleteMultipleTimes(final int count, final int startIndex) {
+        log.debug("Start testCanDeleteMultipleTimes:");
         final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
-        for (int j = 0; j < 10; j++) {
-            testCanPutMultipleTimes(0, startIndex);
-            for (int i = startIndex; i < count; i++) {
-                final String key = "This is a key" + i;
-                client.del(key, timeoutMs, delAttempts);
-            }
+
+        for (int i = startIndex; i < startIndex + count; i++) {
+            final String key = "This is a key" + i;
+            assertDoesNotThrow(() -> client.del(key, timeoutMs, delAttempts));
         }
 
-        log.debug("End testCanDelete1000Times:");
+        log.debug("End testCanDeleteMultipleTimes:");
     }
 
-    private static void testMultipleConnections() {
-        log.debug("Start testMultipleConnections:");
+    private static void testTwoClientsMultipleKeyValues() {
+        log.debug("Start testTwoClientsMultipleKeyValues:");
 
-        final Thread thread1 = new Thread(() -> {
-            try {
-                testMultipleKeyValues(10000, 10000);
-            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | ExecutionException | InterruptedException | TimeoutException e) {
-                e.printStackTrace();
-            }
-        });
-
-        final Thread thread2 = new Thread(() -> {
-            try {
-                testMultipleKeyValues(10000, 20000);
-            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | ExecutionException | InterruptedException | TimeoutException e) {
-                e.printStackTrace();
-            }
-        });
+        final Thread thread1 = new Thread(() -> testMultipleKeyValues(1000, 0));
+        final Thread thread2 = new Thread(() -> testMultipleKeyValues(1000, 1000));
 
         thread1.start();
         thread2.start();
 
-        log.debug("End testMultipleConnections:");
+        log.debug("End testTwoClientsMultipleKeyValues:");
+    }
+
+    private static void testThreeClientsMultipleKeyValues() {
+        log.debug("Start testThreeClientsMultipleKeyValues:");
+
+        final Thread thread1 = new Thread(() -> testMultipleKeyValues(1000, 0));
+        final Thread thread2 = new Thread(() -> testMultipleKeyValues(1000, 1000));
+        final Thread thread3 = new Thread(() -> testMultipleKeyValues(1000, 2000));
+
+        thread1.start();
+        thread2.start();
+        thread3.start();
+
+        log.debug("End testThreeClientsMultipleKeyValues:");
     }
 }
