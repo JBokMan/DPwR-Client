@@ -7,6 +7,7 @@ import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
+import org.apache.commons.lang3.SerializationException;
 
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -115,7 +116,7 @@ public class CommunicationUtils {
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
-    public static byte[] receiveValue(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
+    public static byte[] receiveValue(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemoryDescriptor descriptor = new MemoryDescriptor(scope);

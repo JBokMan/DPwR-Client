@@ -60,11 +60,11 @@ public class InfinimumDBClient {
         }
     }
 
-    public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
+    public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
         try (resources) {
             initialize(key);
             return getOperation(key, timeoutMs);
-        } catch (final CloseException | ControlException | TimeoutException e) {
+        } catch (final CloseException | ControlException | TimeoutException | SerializationException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -112,7 +112,7 @@ public class InfinimumDBClient {
     }
 
 
-    private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {
+    private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
         final int tagID = receiveTagID(worker, timeoutMs);
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
