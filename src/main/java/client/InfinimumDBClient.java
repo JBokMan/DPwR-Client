@@ -11,7 +11,6 @@ import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
-import java.lang.ref.Cleaner;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -116,7 +115,7 @@ public class InfinimumDBClient {
     private byte[] getOperation(final String key, final int timeoutMs) throws ControlException, NotFoundException, TimeoutException {
         log.info("Starting GET operation");
         final int tagID = receiveTagID(worker, timeoutMs);
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final ArrayList<Long> requests = new ArrayList<>();
             requests.add(prepareToSendData(tagID, serialize("GET"), endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
@@ -144,7 +143,7 @@ public class InfinimumDBClient {
         final int tagID = receiveTagID(worker, timeoutMs);
         final ArrayList<Long> requests = new ArrayList<>();
 
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requests.add(prepareToSendData(tagID, serialize("DEL"), endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 

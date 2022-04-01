@@ -8,7 +8,6 @@ import jdk.incubator.foreign.ValueLayout;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 
-import java.lang.ref.Cleaner;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -38,7 +37,7 @@ public class CommunicationUtils {
 
     public static void putEntry(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
         log.info("Put Entry");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
             final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
@@ -99,7 +98,7 @@ public class CommunicationUtils {
     }
 
     public static void sendSingleMessage(final int tagID, final byte[] data, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final Long request = prepareToSendData(tagID, data, endpoint, scope);
             sendData(List.of(request), worker, timeoutMs);
         }
@@ -107,7 +106,7 @@ public class CommunicationUtils {
 
     public static byte[] receiveData(final int tagID, final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
         log.info("Receiving message");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
             final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
@@ -118,7 +117,7 @@ public class CommunicationUtils {
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
     public static byte[] receiveValue(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException {
         log.info("Receiving Remote Key");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(Cleaner.create())) {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
             final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
             awaitRequestIfNecessary(request, worker, timeoutMs);
