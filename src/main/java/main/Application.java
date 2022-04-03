@@ -1,6 +1,6 @@
 package main;
 
-import client.InfinimumDBClient;
+import client.DPwRClient;
 import de.hhu.bsinfo.infinileap.binding.ControlException;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
@@ -50,13 +50,13 @@ public final class Application {
 
     private static void testCanConnectToServer() {
         log.debug("Start testCanConnectToServer:");
-        assertDoesNotThrow(() -> new InfinimumDBClient(serverHostAddress, serverPort));
+        assertDoesNotThrow(() -> new DPwRClient(serverHostAddress, serverPort));
         log.debug("End testCanConnectToServer:");
     }
 
     private static void testSuccessfulPut() {
         log.debug("Start testSuccessfulPut:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
 
@@ -67,7 +67,7 @@ public final class Application {
 
     private static void testUnsuccessfulPut() {
         log.debug("Start testUnsuccessfulPut:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
 
@@ -78,7 +78,7 @@ public final class Application {
 
     private static void testSuccessfulGet() {
         log.debug("Start testSuccessfulGet:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
 
@@ -92,7 +92,7 @@ public final class Application {
 
     private static void testUnsuccessfulGet() {
         log.debug("Start testSuccessfulGet:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key1";
 
         assertThrows(NotFoundException.class, () -> client.get(key, timeoutMs, getAttempts));
@@ -102,7 +102,7 @@ public final class Application {
 
     private static void testSuccessfulDelete() {
         log.debug("Start testSuccessfulDelete:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
 
         assertDoesNotThrow(() -> client.del(key, timeoutMs, delAttempts));
@@ -112,7 +112,7 @@ public final class Application {
 
     private static void testUnsuccessfulDelete() {
         log.debug("Start testUnsuccessfulDelete:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
 
         assertThrows(NotFoundException.class, () -> client.del(key, timeoutMs, delAttempts));
@@ -123,7 +123,7 @@ public final class Application {
 
     private static void testCanPutGetAndDeleteObject() {
         log.debug("Start testCanPutGetAndDeleteObject:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
 
@@ -139,7 +139,7 @@ public final class Application {
 
     private static void testTwoKeyValues() {
         log.debug("Start testTwoKeyValues:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
         final byte[] value = serialize("This is a value");
         final String key2 = "This is a key2";
@@ -163,7 +163,7 @@ public final class Application {
 
     private static void testTwoKeyValuesWithCollidingHash() {
         log.debug("Start testTwoKeyValuesWithCollidingHash:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
@@ -187,7 +187,7 @@ public final class Application {
 
     private static void testThreeKeyValuesWithCollidingHash() {
         log.debug("Start testThreeKeyValuesWithCollidingHash:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
@@ -217,7 +217,7 @@ public final class Application {
 
     private static void testThreeKeysWithCollidingHashDeletingInOrder1() {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder1:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
@@ -250,7 +250,7 @@ public final class Application {
 
     private static void testThreeKeysWithCollidingHashDeletingInOrder2() {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
@@ -283,7 +283,7 @@ public final class Application {
 
     private static void testThreeKeysWithCollidingHashDeletingInOrder3() {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
         final byte[] value = serialize("This is a value");
         final String key2 = "hash_collision_test_2";
@@ -316,7 +316,7 @@ public final class Application {
 
     private static void testPutTimeout() {
         log.debug("Start testPutTimeout:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
         final byte[] value = serialize("This is a value");
 
@@ -327,7 +327,7 @@ public final class Application {
 
     private static void testGetTimeout() {
         log.debug("Start testGetTimeout:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
 
         assertThrows(TimeoutException.class, () -> client.get(key, 100, getAttempts));
@@ -337,7 +337,7 @@ public final class Application {
 
     private static void testDeleteTimeout() {
         log.debug("Start testDeleteTimeout:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
 
         assertThrows(TimeoutException.class, () -> client.del(key, 100, delAttempts));
@@ -353,7 +353,7 @@ public final class Application {
 
     private static void testCanPutMultipleTimes(final int count, final int startIndex) {
         log.debug("Start testCanPutMultipleTimes:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
@@ -366,7 +366,7 @@ public final class Application {
 
     private static void testCanGetMultipleTimes(final int count, final int startIndex) {
         log.debug("Start testCanGetMultipleTimes:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
@@ -382,7 +382,7 @@ public final class Application {
 
     private static void testCanDeleteMultipleTimes(final int count, final int startIndex) {
         log.debug("Start testCanDeleteMultipleTimes:");
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
@@ -459,7 +459,7 @@ public final class Application {
     }
 
     private static void stress(final int range, final int count, final CountDownLatch latch) {
-        final InfinimumDBClient client = new InfinimumDBClient(serverHostAddress, serverPort);
+        final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final Random random = new Random();
         for (int i = 0; i < count; i++) {
             final int index = random.ints(0, range).findFirst().getAsInt();

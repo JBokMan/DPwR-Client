@@ -22,7 +22,7 @@ import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static utils.CommunicationUtils.*;
 
 @Slf4j
-public class InfinimumDBClient {
+public class DPwRClient {
     private final ResourcePool resources = new ResourcePool();
     private final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private Context context;
@@ -30,7 +30,7 @@ public class InfinimumDBClient {
 
     private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
 
-    public InfinimumDBClient(final String serverHostAddress, final Integer serverPort) {
+    public DPwRClient(final String serverHostAddress, final Integer serverPort) {
         this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
         NativeLogger.enable();
         log.info("Using UCX version {}", Context.getVersion());
