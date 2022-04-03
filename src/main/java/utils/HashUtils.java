@@ -12,6 +12,20 @@ import java.util.Arrays;
 public class HashUtils {
     private static final boolean TEST_MODE = true;
 
+    public static byte[] generateID(final String key, final byte[] idTailEndBytes) {
+        // Generate plasma object id
+        byte[] id = new byte[0];
+        try {
+            id = getMD5Hash(key);
+        } catch (final NoSuchAlgorithmException e) {
+            log.error("The MD5 hash algorithm was not found.", e);
+            //ToDo handle exception
+        }
+        final byte[] fullID = ArrayUtils.addAll(id, idTailEndBytes);
+        log.info("FullID: {} of key: {}", fullID, key);
+        return fullID;
+    }
+
     public static byte[] generateID(final String key) {
         return generateID(key, new byte[4]);
     }
@@ -38,19 +52,5 @@ public class HashUtils {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
-    }
-
-    public static byte[] generateID(String key, byte[] idTailEndBytes) {
-        // Generate plasma object id
-        byte[] id = new byte[0];
-        try {
-            id = getMD5Hash(key);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("The MD5 hash algorithm was not found.", e);
-            //ToDo handle exception
-        }
-        final byte[] fullID = ArrayUtils.addAll(id, idTailEndBytes);
-        log.info("FullID: {} of key: {}", fullID, key);
-        return fullID;
     }
 }
