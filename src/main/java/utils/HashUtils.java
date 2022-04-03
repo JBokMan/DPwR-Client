@@ -13,17 +13,7 @@ public class HashUtils {
     private static final boolean TEST_MODE = true;
 
     public static byte[] generateID(final String key) {
-        // Generate plasma object id
-        byte[] id = new byte[0];
-        try {
-            id = getMD5Hash(key);
-        } catch (NoSuchAlgorithmException e) {
-            log.error("The MD5 hash algorithm was not found.", e);
-            //ToDo handle exception
-        }
-        final byte[] fullID = ArrayUtils.addAll(id, new byte[4]);
-        log.info("FullID: {} of key: {}", fullID, key);
-        return fullID;
+        return generateID(key, new byte[4]);
     }
 
     public static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
