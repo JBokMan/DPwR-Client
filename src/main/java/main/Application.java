@@ -473,7 +473,7 @@ public final class Application {
                     case 2 -> client.del(key, timeoutMs, delAttempts);
                 }
             } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | TimeoutException e) {
-                e.printStackTrace();
+                log.error(e.getMessage());
             }
         }
         latch.countDown();
