@@ -11,7 +11,6 @@ import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.commons.lang3.SerializationUtils;
 
-import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -48,21 +47,6 @@ public class DPwRClient {
         } catch (final ControlException e) {
             e.printStackTrace();
         }
-
-        setupServerConnection(serverHostAddress, serverPort);
-        try {
-            testServerConnection();
-        } catch (final ConnectException e) {
-            log.error("InfinimumDB-Server could not be reached");
-        }
-    }
-
-    private void testServerConnection() throws ConnectException {
-        //TODO implement
-    }
-
-    private void setupServerConnection(final String serverHostAddress, final Integer serverPort) {
-        //TODO implement
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {

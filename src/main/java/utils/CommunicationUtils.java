@@ -25,6 +25,8 @@ import static utils.HashUtils.generateID;
 @Slf4j
 public class CommunicationUtils {
 
+    final private static TimeUnit timeUnit = TimeUnit.MILLISECONDS;
+
     public static Long prepareToSendData(final int tagID, final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
         log.info("Prepare to send data");
         final int dataSize = data.length;
@@ -73,7 +75,6 @@ public class CommunicationUtils {
                 while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
                     worker.progress();
                     try {
-                        final TimeUnit timeUnit = TimeUnit.MILLISECONDS;
                         synchronized (timeUnit) {
                             timeUnit.wait(1);
                         }
@@ -145,7 +146,6 @@ public class CommunicationUtils {
         while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
             worker.progress();
             try {
-                final TimeUnit timeUnit = TimeUnit.MILLISECONDS;
                 synchronized (timeUnit) {
                     timeUnit.wait(1);
                 }
