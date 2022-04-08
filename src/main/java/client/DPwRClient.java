@@ -9,7 +9,6 @@ import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
-import org.apache.commons.lang3.SerializationUtils;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -19,6 +18,7 @@ import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static utils.CommunicationUtils.*;
+import static utils.HashUtils.getResponsibleServerID;
 
 @Slf4j
 public class DPwRClient {
@@ -92,23 +92,21 @@ public class DPwRClient {
         log.info("Starting PUT operation");
         final int tagID = receiveTagID(worker, timeoutMs);
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
-        final byte[] entrySizeBytes = getLengthAsBytes(entryBytes);
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendData(tagID, serialize("PUT"), endpoint, scope));
+            requests.add(prepareToSendString(tagID, "PUT", endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
-            requests.add(prepareToSendData(tagID, entrySizeBytes, endpoint, scope));
+            requests.add(prepareToSendInteger(tagID, entryBytes.length, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
-        log.info("Received status code: \"{}\"", statusCode);
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
 
         if ("200".equals(statusCode)) {
-            putEntry(tagID, entryBytes, worker, endpoint, timeoutMs);
-            sendSingleMessage(tagID, serialize("200"), endpoint, worker, timeoutMs);
+            sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, timeoutMs);
+            sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         } else if ("409".equals(statusCode)) {
             throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
@@ -121,19 +119,18 @@ public class DPwRClient {
         final int tagID = receiveTagID(worker, timeoutMs);
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendData(tagID, serialize("GET"), endpoint, scope));
+            requests.add(prepareToSendString(tagID, "GET", endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
-        log.info("Received status code: \"{}\"", statusCode);
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
 
         byte[] value = new byte[0];
         if ("200".equals(statusCode)) {
-            value = receiveValue(tagID, endpoint, worker, timeoutMs);
-            sendSingleMessage(tagID, serialize("200"), endpoint, worker, timeoutMs);
+            value = receiveValuePerRDMA(tagID, endpoint, worker, timeoutMs);
+            sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
 
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
@@ -148,14 +145,13 @@ public class DPwRClient {
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendData(tagID, serialize("DEL"), endpoint, scope));
+            requests.add(prepareToSendString(tagID, "DEL", endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
             sendData(requests, worker, timeoutMs);
         }
 
-        final String statusCode = SerializationUtils.deserialize(receiveData(tagID, 10, worker, timeoutMs));
-        log.info("Received status code: \"{}\"", statusCode);
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
 
         if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");

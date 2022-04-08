@@ -3,6 +3,7 @@ package utils;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
 
+import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -52,5 +53,12 @@ public class HashUtils {
             sb.append(String.format("%02x", b));
         }
         return sb.toString();
+    }
+
+    public static Integer getResponsibleServerID(final String key, final int serverCount) {
+        final byte[] id = generateID(key);
+        final String idAsHexValues = bytesToHex(id);
+        final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
+        return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
     }
 }
