@@ -13,7 +13,7 @@ import java.util.Arrays;
 public class HashUtils {
     private static final boolean TEST_MODE = true;
 
-    public static byte[] generateID(final String key, final byte[] idTailEndBytes) {
+    private static byte[] generateID(final String key, final byte[] idTailEndBytes) {
         // Generate plasma object id
         byte[] id = new byte[0];
         try {
@@ -27,11 +27,11 @@ public class HashUtils {
         return fullID;
     }
 
-    public static byte[] generateID(final String key) {
+    private static byte[] generateID(final String key) {
         return generateID(key, new byte[4]);
     }
 
-    public static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
+    private static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
         final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
         byte[] id = messageDigest.digest(text.getBytes(StandardCharsets.UTF_8));
         if (TEST_MODE) {
@@ -47,7 +47,7 @@ public class HashUtils {
         return id;
     }
 
-    public static String bytesToHex(final byte[] bytes) {
+    private static String bytesToHex(final byte[] bytes) {
         final StringBuilder sb = new StringBuilder();
         for (final byte b : bytes) {
             sb.append(String.format("%02x", b));
