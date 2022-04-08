@@ -44,30 +44,12 @@ public class CommunicationUtils {
         return prepareToSendData(tagID, byteBuffer.array(), endpoint, scope);
     }
 
-    public static void sendEntryPerRDMA(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
-        log.info("Send Entry per RDMA");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
-            final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
-            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
-                awaitRequestIfNecessary(request, worker, timeoutMs);
-            }
-        }
-    }
-
-    private static MemoryDescriptor receiveMemoryDescriptor(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
-        log.info("Receiving Memory Descriptor");
-        final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-        final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
-        awaitRequestIfNecessary(request, worker, timeoutMs);
-        return descriptor;
-    }
-
-    private static MemorySegment memorySegmentOfBytes(final byte[] entryBytes, final ResourceScope scope) {
-        final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes.length, scope);
-        sourceBuffer.asByteBuffer().put(entryBytes);
-        return sourceBuffer;
+    public static ArrayList<Long> prepareToSendKey(final int tagID, final String key, final Endpoint endpoint, final ResourceScope scope) {
+        final ArrayList<Long> requests = new ArrayList<>();
+        final byte[] keyBytes = serialize(key);
+        requests.add(prepareToSendInteger(tagID, keyBytes.length, endpoint, scope));
+        requests.add(prepareToSendData(tagID, keyBytes, endpoint, scope));
+        return requests;
     }
 
     public static void sendData(final List<Long> requests, final Worker worker, final int timeoutMs) throws TimeoutException {
@@ -112,6 +94,24 @@ public class CommunicationUtils {
         }
     }
 
+    private static MemorySegment memorySegmentOfBytes(final byte[] entryBytes, final ResourceScope scope) {
+        final MemorySegment sourceBuffer = MemorySegment.allocateNative(entryBytes.length, scope);
+        sourceBuffer.asByteBuffer().put(entryBytes);
+        return sourceBuffer;
+    }
+
+    public static void sendEntryPerRDMA(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
+        log.info("Send Entry per RDMA");
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
+            final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
+            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
+                awaitRequestIfNecessary(request, worker, timeoutMs);
+            }
+        }
+    }
+
     private static byte[] receiveData(final int tagID, final int size, final Worker worker, final int timeoutMs) throws TimeoutException {
         log.info("Receiving message");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -120,6 +120,39 @@ public class CommunicationUtils {
             awaitRequestIfNecessary(request, worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
+    }
+
+    private static int receiveInteger(final Worker worker, final int timeoutMs) throws TimeoutException {
+        final byte[] integerBytes = receiveData(0, Integer.BYTES, worker, timeoutMs);
+        final ByteBuffer byteBuffer = ByteBuffer.wrap(integerBytes);
+        final int number = byteBuffer.getInt();
+        log.info("Received \"{}\"", number);
+        return number;
+    }
+
+    public static int receiveTagID(final Worker worker, final int timeoutMs) throws TimeoutException {
+        return receiveInteger(worker, timeoutMs);
+    }
+
+    public static String receiveStatusCode(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
+        final byte[] statusCodeBytes = receiveData(tagID, 10, worker, timeoutMs);
+        final String statusCode = deserialize(statusCodeBytes);
+        log.info("Received status code: \"{}\"", statusCode);
+        return statusCode;
+    }
+
+    private static MemoryDescriptor receiveMemoryDescriptor(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        log.info("Receiving Memory Descriptor");
+        final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
+        final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
+        awaitRequestIfNecessary(request, worker, timeoutMs);
+        return descriptor;
+    }
+
+    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) {
+        final byte[] data = new byte[objectBuffer.remaining()];
+        objectBuffer.get(data);
+        return deserialize(data);
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
@@ -168,38 +201,5 @@ public class CommunicationUtils {
         } else {
             Requests.release(request);
         }
-    }
-
-    private static int receiveInteger(final Worker worker, final int timeoutMs) throws TimeoutException {
-        final byte[] integerBytes = receiveData(0, Integer.BYTES, worker, timeoutMs);
-        final ByteBuffer byteBuffer = ByteBuffer.wrap(integerBytes);
-        final int number = byteBuffer.getInt();
-        log.info("Received \"{}\"", number);
-        return number;
-    }
-
-    public static int receiveTagID(final Worker worker, final int timeoutMs) throws TimeoutException {
-        return receiveInteger(worker, timeoutMs);
-    }
-
-    public static String receiveStatusCode(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
-        final byte[] statusCodeBytes = receiveData(tagID, 10, worker, timeoutMs);
-        final String statusCode = deserialize(statusCodeBytes);
-        log.info("Received status code: \"{}\"", statusCode);
-        return statusCode;
-    }
-
-    public static ArrayList<Long> prepareToSendKey(final int tagID, final String key, final Endpoint endpoint, final ResourceScope scope) {
-        final ArrayList<Long> requests = new ArrayList<>();
-        final byte[] keyBytes = serialize(key);
-        requests.add(prepareToSendInteger(tagID, keyBytes.length, endpoint, scope));
-        requests.add(prepareToSendData(tagID, keyBytes, endpoint, scope));
-        return requests;
-    }
-
-    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) {
-        final byte[] data = new byte[objectBuffer.remaining()];
-        objectBuffer.get(data);
-        return deserialize(data);
     }
 }
