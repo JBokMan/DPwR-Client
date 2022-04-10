@@ -50,8 +50,7 @@ public class DPwRClient {
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
-        try (resources) {
-            final Endpoint endpoint = createEndpoint(key);
+        try (resources; final Endpoint endpoint = createEndpoint(key)) {
             putOperation(key, value, timeoutMs, endpoint);
         } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
@@ -63,8 +62,7 @@ public class DPwRClient {
     }
 
     public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
-        try (resources) {
-            final Endpoint endpoint = createEndpoint(key);
+        try (resources; final Endpoint endpoint = createEndpoint(key)) {
             return getOperation(key, timeoutMs, endpoint);
         } catch (final CloseException | ControlException | TimeoutException | SerializationException e) {
             if (maxAttempts == 1) {
@@ -76,8 +74,7 @@ public class DPwRClient {
     }
 
     public void del(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
-        try (resources) {
-            final Endpoint endpoint = createEndpoint(key);
+        try (resources; final Endpoint endpoint = createEndpoint(key)) {
             delOperation(key, timeoutMs, endpoint);
         } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
@@ -171,7 +168,7 @@ public class DPwRClient {
         // Creating Endpoint
         log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
         final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(this.serverMap.get(responsibleServerID)).setPeerErrorHandlingMode();
-        return pushResource(this.worker.createEndpoint(endpointParams));
+        return this.worker.createEndpoint(endpointParams);
     }
 
     private void resetWorker() {
