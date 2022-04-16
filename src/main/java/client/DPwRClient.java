@@ -29,11 +29,9 @@ public class DPwRClient {
 
     private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
 
-    public DPwRClient(final String serverHostAddress, final Integer serverPort) {
-        this.serverMap.put(0, new InetSocketAddress(serverHostAddress, serverPort));
+    public DPwRClient(final String serverHostAddress, final Integer serverPort) throws CloseException, ControlException, TimeoutException {
         NativeLogger.enable();
         log.info("Using UCX version {}", Context.getVersion());
-
         try {
             // Initialize UCP context
             log.info("Initializing context");
@@ -47,6 +45,7 @@ public class DPwRClient {
         } catch (final ControlException e) {
             e.printStackTrace();
         }
+        getNetworkInformation(serverHostAddress, serverPort, 5);
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
@@ -83,6 +82,31 @@ public class DPwRClient {
             resetWorker();
             del(key, timeoutMs, maxAttempts - 1);
         }
+    }
+
+    private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, CloseException, ControlException {
+        try (resources; final Endpoint endpoint = createEndpoint(serverHostAddress, serverPort)) {
+            infOperation(100000, endpoint);
+        } catch (final CloseException | ControlException | TimeoutException e) {
+            if (maxAttempts == 1) {
+                throw e;
+            }
+            resetWorker();
+            getNetworkInformation(serverHostAddress, serverPort, maxAttempts - 1);
+        }
+    }
+
+    private void infOperation(final int timeoutMs, final Endpoint endpoint) throws TimeoutException {
+        final int tagID = receiveTagID(worker, timeoutMs);
+        sendStatusCode(tagID, "INF", endpoint, worker, timeoutMs);
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
+        final int serverCount = receiveTagID(worker, timeoutMs);
+        for (int i = 0; i < serverCount; i++) {
+            final InetSocketAddress serverAddress = receiveAddress(tagID, worker, timeoutMs);
+            this.serverMap.put(i, serverAddress);
+        }
+        sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
+        log.info(String.valueOf(this.serverMap));
     }
 
     public void putOperation(final String key, final byte[] value, final int timeoutMs, final Endpoint endpoint) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
@@ -156,11 +180,6 @@ public class DPwRClient {
         log.info("Del completed\n");
     }
 
-    protected <T extends AutoCloseable> T pushResource(final T resource) {
-        resources.push(resource);
-        return resource;
-    }
-
     private Endpoint createEndpoint(final String key) throws ControlException {
         // Determining responsible server
         final Integer responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
@@ -168,6 +187,14 @@ public class DPwRClient {
         // Creating Endpoint
         log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
         final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(this.serverMap.get(responsibleServerID)).setPeerErrorHandlingMode();
+        return this.worker.createEndpoint(endpointParams);
+    }
+
+    private Endpoint createEndpoint(final String serverHostAddress, final int serverPort) throws ControlException {
+        // Creating Endpoint
+        final InetSocketAddress address = new InetSocketAddress(serverHostAddress, serverPort);
+        log.info("Connecting to {}", address);
+        final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(address).setPeerErrorHandlingMode();
         return this.worker.createEndpoint(endpointParams);
     }
 

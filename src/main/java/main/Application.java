@@ -24,7 +24,7 @@ public final class Application {
     private static final Integer getAttempts = 5;
     private static final Integer delAttempts = 5;
 
-    public static void main(final String... args) {
+    public static void main(final String... args) throws CloseException, ControlException, TimeoutException {
         testCanConnectToServer();
         testSuccessfulPut();
         testUnsuccessfulPut();
@@ -54,7 +54,7 @@ public final class Application {
         log.debug("End testCanConnectToServer:");
     }
 
-    private static void testSuccessfulPut() {
+    private static void testSuccessfulPut() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testSuccessfulPut:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -65,7 +65,7 @@ public final class Application {
         log.debug("End testSuccessfulPut:");
     }
 
-    private static void testUnsuccessfulPut() {
+    private static void testUnsuccessfulPut() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testUnsuccessfulPut:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -76,7 +76,7 @@ public final class Application {
         log.debug("End testUnsuccessfulPut:");
     }
 
-    private static void testSuccessfulGet() {
+    private static void testSuccessfulGet() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testSuccessfulGet:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -90,7 +90,7 @@ public final class Application {
         log.debug("End testSuccessfulGet:");
     }
 
-    private static void testUnsuccessfulGet() {
+    private static void testUnsuccessfulGet() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testSuccessfulGet:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key1";
@@ -100,7 +100,7 @@ public final class Application {
         log.debug("End testSuccessfulGet:");
     }
 
-    private static void testSuccessfulDelete() {
+    private static void testSuccessfulDelete() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testSuccessfulDelete:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -110,7 +110,7 @@ public final class Application {
         log.debug("End testSuccessfulDelete:");
     }
 
-    private static void testUnsuccessfulDelete() {
+    private static void testUnsuccessfulDelete() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testUnsuccessfulDelete:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -121,7 +121,7 @@ public final class Application {
     }
 
 
-    private static void testCanPutGetAndDeleteObject() {
+    private static void testCanPutGetAndDeleteObject() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testCanPutGetAndDeleteObject:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -137,7 +137,7 @@ public final class Application {
         log.debug("End testCanPutGetAndDeleteObject:");
     }
 
-    private static void testTwoKeyValues() {
+    private static void testTwoKeyValues() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testTwoKeyValues:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "This is a key";
@@ -161,7 +161,7 @@ public final class Application {
         log.debug("End testTwoKeyValues:");
     }
 
-    private static void testTwoKeyValuesWithCollidingHash() {
+    private static void testTwoKeyValuesWithCollidingHash() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testTwoKeyValuesWithCollidingHash:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -185,7 +185,7 @@ public final class Application {
         log.debug("End testTwoKeyValuesWithCollidingHash:");
     }
 
-    private static void testThreeKeyValuesWithCollidingHash() {
+    private static void testThreeKeyValuesWithCollidingHash() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testThreeKeyValuesWithCollidingHash:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -215,7 +215,7 @@ public final class Application {
         log.debug("End testThreeKeyValuesWithCollidingHash:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder1() {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder1() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder1:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -248,7 +248,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder1:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder2() {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder2() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder2:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -281,7 +281,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder2:");
     }
 
-    private static void testThreeKeysWithCollidingHashDeletingInOrder3() {
+    private static void testThreeKeysWithCollidingHashDeletingInOrder3() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testThreeKeysWithCollidingHashDeletingInOrder3:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "hash_collision_test_1";
@@ -314,7 +314,7 @@ public final class Application {
         log.debug("End testThreeKeysWithCollidingHashDeletingInOrder3:");
     }
 
-    private static void testPutTimeout() {
+    private static void testPutTimeout() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testPutTimeout:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
@@ -325,7 +325,7 @@ public final class Application {
         log.debug("End testPutTimeout:");
     }
 
-    private static void testGetTimeout() {
+    private static void testGetTimeout() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testGetTimeout:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
@@ -335,7 +335,7 @@ public final class Application {
         log.debug("End testGetTimeout:");
     }
 
-    private static void testDeleteTimeout() {
+    private static void testDeleteTimeout() throws CloseException, ControlException, TimeoutException {
         log.debug("Start testDeleteTimeout:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final String key = "timeout_test";
@@ -345,13 +345,13 @@ public final class Application {
         log.debug("End testDeleteTimeout:");
     }
 
-    private static void testMultipleKeyValues(final int count, final int startIndex) {
+    private static void testMultipleKeyValues(final int count, final int startIndex) throws CloseException, ControlException, TimeoutException {
         testCanPutMultipleTimes(count, startIndex);
         testCanGetMultipleTimes(count, startIndex);
         testCanDeleteMultipleTimes(count, startIndex);
     }
 
-    private static void testCanPutMultipleTimes(final int count, final int startIndex) {
+    private static void testCanPutMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, TimeoutException {
         log.debug("Start testCanPutMultipleTimes:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
@@ -364,7 +364,7 @@ public final class Application {
         log.debug("End testCanPutMultipleTimes:");
     }
 
-    private static void testCanGetMultipleTimes(final int count, final int startIndex) {
+    private static void testCanGetMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, TimeoutException {
         log.debug("Start testCanGetMultipleTimes:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
@@ -380,7 +380,7 @@ public final class Application {
         log.debug("End testCanGetMultipleTimes:");
     }
 
-    private static void testCanDeleteMultipleTimes(final int count, final int startIndex) {
+    private static void testCanDeleteMultipleTimes(final int count, final int startIndex) throws CloseException, ControlException, TimeoutException {
         log.debug("Start testCanDeleteMultipleTimes:");
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
 
@@ -397,11 +397,19 @@ public final class Application {
         final CountDownLatch latch = new CountDownLatch(2);
 
         final Thread thread1 = new Thread(() -> {
-            testMultipleKeyValues(1000, 1000);
+            try {
+                testMultipleKeyValues(1000, 1000);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
             latch.countDown();
         });
         final Thread thread2 = new Thread(() -> {
-            testMultipleKeyValues(1000, 2000);
+            try {
+                testMultipleKeyValues(1000, 2000);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
             latch.countDown();
         });
 
@@ -418,15 +426,27 @@ public final class Application {
         final CountDownLatch latch = new CountDownLatch(3);
 
         final Thread thread1 = new Thread(() -> {
-            testMultipleKeyValues(1000, 3000);
+            try {
+                testMultipleKeyValues(1000, 3000);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
             latch.countDown();
         });
         final Thread thread2 = new Thread(() -> {
-            testMultipleKeyValues(1000, 4000);
+            try {
+                testMultipleKeyValues(1000, 4000);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
             latch.countDown();
         });
         final Thread thread3 = new Thread(() -> {
-            testMultipleKeyValues(1000, 5000);
+            try {
+                testMultipleKeyValues(1000, 5000);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
             latch.countDown();
         });
 
@@ -443,10 +463,34 @@ public final class Application {
         log.debug("Start testStress:");
         final CountDownLatch latch = new CountDownLatch(4);
 
-        final Thread thread1 = new Thread(() -> stress(50, 1000, latch));
-        final Thread thread2 = new Thread(() -> stress(50, 1000, latch));
-        final Thread thread3 = new Thread(() -> stress(50, 1000, latch));
-        final Thread thread4 = new Thread(() -> stress(50, 1000, latch));
+        final Thread thread1 = new Thread(() -> {
+            try {
+                stress(50, 1000, latch);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
+        final Thread thread2 = new Thread(() -> {
+            try {
+                stress(50, 1000, latch);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
+        final Thread thread3 = new Thread(() -> {
+            try {
+                stress(50, 1000, latch);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
+        final Thread thread4 = new Thread(() -> {
+            try {
+                stress(50, 1000, latch);
+            } catch (final CloseException | ControlException | TimeoutException e) {
+                e.printStackTrace();
+            }
+        });
 
         thread1.start();
         thread2.start();
@@ -458,7 +502,7 @@ public final class Application {
         log.debug("End testStress:");
     }
 
-    private static void stress(final int range, final int count, final CountDownLatch latch) {
+    private static void stress(final int range, final int count, final CountDownLatch latch) throws CloseException, ControlException, TimeoutException {
         final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
         final Random random = new Random();
         for (int i = 0; i < count; i++) {

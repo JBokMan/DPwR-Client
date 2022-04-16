@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
@@ -123,8 +124,8 @@ public class CommunicationUtils {
         }
     }
 
-    private static int receiveInteger(final Worker worker, final int timeoutMs) throws TimeoutException {
-        final byte[] integerBytes = receiveData(0, Integer.BYTES, worker, timeoutMs);
+    private static int receiveInteger(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+        final byte[] integerBytes = receiveData(tagID, Integer.BYTES, worker, timeoutMs);
         final ByteBuffer byteBuffer = ByteBuffer.wrap(integerBytes);
         final int number = byteBuffer.getInt();
         log.info("Received \"{}\"", number);
@@ -132,8 +133,15 @@ public class CommunicationUtils {
     }
 
     public static int receiveTagID(final Worker worker, final int timeoutMs) throws TimeoutException {
-        return receiveInteger(worker, timeoutMs);
+        return receiveInteger(0, worker, timeoutMs);
     }
+
+    public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+        final int addressSize = receiveInteger(tagID, worker, timeoutMs);
+        final byte[] serverAddressBytes = receiveData(tagID, addressSize, worker, timeoutMs);
+        return deserialize(serverAddressBytes);
+    }
+
 
     public static String receiveStatusCode(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
         final byte[] statusCodeBytes = receiveData(tagID, 10, worker, timeoutMs);
