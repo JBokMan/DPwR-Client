@@ -32,7 +32,7 @@ public class CommunicationUtils {
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
         buffer.copyFrom(source);
 
-        return endpoint.sendTagged(buffer, Tag.of(tagID), new RequestParameters());
+        return endpoint.sendTagged(buffer, Tag.of(tagID));
     }
 
     public static Long prepareToSendString(final int tagID, final String string, final Endpoint endpoint, final ResourceScope scope) {
@@ -52,34 +52,35 @@ public class CommunicationUtils {
         return requests;
     }
 
-    public static void sendData(final List<Long> requests, final Worker worker, final int timeoutMs) throws TimeoutException {
-        log.info("Sending data");
+    private static void awaitRequest(final long request, final Worker worker, final int timeoutMs) throws TimeoutException, InterruptedException {
+        log.info("Await request");
+        int counter = 0;
+        while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
+            worker.progress();
+            synchronized (timeUnit) {
+                timeUnit.wait(1);
+            }
+            counter++;
+        }
+        if (state(request) != Requests.State.COMPLETE) {
+            worker.cancelRequest(request);
+            throw new TimeoutException("A timeout occurred while receiving data");
+        } else {
+            Requests.release(request);
+        }
+    }
+
+    public static void awaitRequests(final List<Long> requests, final Worker worker, final int timeoutMs) throws TimeoutException {
         boolean timeoutHappened = false;
         for (final Long request : requests) {
             if (timeoutHappened) {
                 worker.cancelRequest(request);
-            } else {
-                int counter = 0;
-                while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
-                    worker.progress();
-                    try {
-                        synchronized (timeUnit) {
-                            timeUnit.wait(1);
-                        }
-                    } catch (final InterruptedException e) {
-                        log.error(e.getMessage());
-                        worker.cancelRequest(request);
-                        timeoutHappened = true;
-                        continue;
-                    }
-                    counter++;
-                }
-                if (state(request) != Requests.State.COMPLETE) {
-                    worker.cancelRequest(request);
-                    timeoutHappened = true;
-                } else {
-                    Requests.release(request);
-                }
+                continue;
+            }
+            try {
+                awaitRequest(request, worker, timeoutMs);
+            } catch (final TimeoutException | InterruptedException e) {
+                timeoutHappened = true;
             }
         }
         if (timeoutHappened) {
@@ -90,7 +91,7 @@ public class CommunicationUtils {
     public static void sendStatusCode(final int tagID, final String statusCode, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final Long request = prepareToSendString(tagID, statusCode, endpoint, scope);
-            sendData(List.of(request), worker, timeoutMs);
+            awaitRequests(List.of(request), worker, timeoutMs);
         }
     }
 
@@ -107,7 +108,7 @@ public class CommunicationUtils {
             final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
                 final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
-                awaitRequestIfNecessary(request, worker, timeoutMs);
+                awaitRequests(List.of(request), worker, timeoutMs);
             }
         }
     }
@@ -117,7 +118,7 @@ public class CommunicationUtils {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
             final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
-            awaitRequestIfNecessary(request, worker, timeoutMs);
+            awaitRequests(List.of(request), worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
     }
@@ -145,7 +146,7 @@ public class CommunicationUtils {
         log.info("Receiving Memory Descriptor");
         final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
         final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
-        awaitRequestIfNecessary(request, worker, timeoutMs);
+        awaitRequests(List.of(request), worker, timeoutMs);
         return descriptor;
     }
 
@@ -161,12 +162,12 @@ public class CommunicationUtils {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
             final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
-            awaitRequestIfNecessary(request, worker, timeoutMs);
+            awaitRequests(List.of(request), worker, timeoutMs);
 
             final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
                 final long request2 = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-                awaitRequestIfNecessary(request2, worker, timeoutMs);
+                awaitRequests(List.of(request2), worker, timeoutMs);
             }
 
             final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
@@ -174,32 +175,6 @@ public class CommunicationUtils {
             log.info("Read \"{}\" from remote buffer", entry);
 
             return entry.value;
-        }
-    }
-
-    private static void awaitRequestIfNecessary(final long request, final Worker worker, final int timeoutMs) throws TimeoutException {
-        if (Status.isError(request)) {
-            log.warn("A request has an error status");
-        }
-        int counter = 0;
-        while (state(request) != Requests.State.COMPLETE && counter < timeoutMs) {
-            worker.progress();
-            try {
-                synchronized (timeUnit) {
-                    timeUnit.wait(1);
-                }
-            } catch (final InterruptedException e) {
-                log.error(e.getMessage());
-                worker.cancelRequest(request);
-                return;
-            }
-            counter++;
-        }
-        if (state(request) != Requests.State.COMPLETE) {
-            worker.cancelRequest(request);
-            throw new TimeoutException("A timeout occurred while receiving data");
-        } else {
-            Requests.release(request);
         }
     }
 }

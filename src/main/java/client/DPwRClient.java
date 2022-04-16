@@ -96,7 +96,7 @@ public class DPwRClient {
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
             requests.add(prepareToSendInteger(tagID, entryBytes.length, endpoint, scope));
 
-            sendData(requests, worker, timeoutMs);
+            awaitRequests(requests, worker, timeoutMs);
         }
 
         final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
@@ -119,7 +119,7 @@ public class DPwRClient {
             requests.add(prepareToSendString(tagID, "GET", endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
-            sendData(requests, worker, timeoutMs);
+            awaitRequests(requests, worker, timeoutMs);
         }
 
         final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
@@ -145,7 +145,7 @@ public class DPwRClient {
             requests.add(prepareToSendString(tagID, "DEL", endpoint, scope));
             requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
 
-            sendData(requests, worker, timeoutMs);
+            awaitRequests(requests, worker, timeoutMs);
         }
 
         final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
