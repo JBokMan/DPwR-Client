@@ -516,7 +516,8 @@ public final class Application {
                     case 1 -> client.get(key, timeoutMs, getAttempts);
                     case 2 -> client.del(key, timeoutMs, delAttempts);
                 }
-            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException | TimeoutException e) {
+            } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException |
+                           TimeoutException e) {
                 log.error(e.getMessage());
             }
         }
