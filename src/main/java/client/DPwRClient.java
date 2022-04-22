@@ -86,7 +86,7 @@ public class DPwRClient {
 
     private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, CloseException, ControlException {
         try (resources; final Endpoint endpoint = createEndpoint(serverHostAddress, serverPort)) {
-            infOperation(100000, endpoint);
+            infOperation(500, endpoint);
         } catch (final CloseException | ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
