@@ -300,14 +300,14 @@ public class DPwRClientTest {
     }
 
     @Test
-    @Timeout(20)
+    @Timeout(60)
     void testTwoClientsMultipleKeyValues() {
         final CountDownLatch latch = new CountDownLatch(2);
 
         final Thread thread1 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                assertDoesNotThrow(() -> testMultipleKeyValues(1000, 1000, client));
+                assertDoesNotThrow(() -> testMultipleKeyValues(500, 1000, client));
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -316,7 +316,7 @@ public class DPwRClientTest {
         final Thread thread2 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                assertDoesNotThrow(() -> testMultipleKeyValues(1000, 2000, client));
+                assertDoesNotThrow(() -> testMultipleKeyValues(500, 2000, client));
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -330,14 +330,14 @@ public class DPwRClientTest {
     }
 
     @Test
-    @Timeout(21)
+    @Timeout(60)
     void testThreeClientsMultipleKeyValues() {
         final CountDownLatch latch = new CountDownLatch(3);
 
         final Thread thread1 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                assertDoesNotThrow(() -> testMultipleKeyValues(1000, 3000, client));
+                assertDoesNotThrow(() -> testMultipleKeyValues(500, 3000, client));
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -346,7 +346,7 @@ public class DPwRClientTest {
         final Thread thread2 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                assertDoesNotThrow(() -> testMultipleKeyValues(1000, 4000, client));
+                assertDoesNotThrow(() -> testMultipleKeyValues(500, 4000, client));
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -355,7 +355,7 @@ public class DPwRClientTest {
         final Thread thread3 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                assertDoesNotThrow(() -> testMultipleKeyValues(1000, 5000, client));
+                assertDoesNotThrow(() -> testMultipleKeyValues(500, 5000, client));
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -370,14 +370,14 @@ public class DPwRClientTest {
     }
 
     @Test
-    @Timeout(22)
+    @Timeout(60)
     void testStress() {
         final CountDownLatch latch = new CountDownLatch(4);
 
         final Thread thread1 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                stress(50, 1000, latch, client);
+                stress(50, 500, latch, client);
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -385,7 +385,7 @@ public class DPwRClientTest {
         final Thread thread2 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                stress(50, 1000, latch, client);
+                stress(50, 500, latch, client);
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -393,7 +393,7 @@ public class DPwRClientTest {
         final Thread thread3 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                stress(50, 1000, latch, client);
+                stress(50, 500, latch, client);
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
@@ -401,7 +401,7 @@ public class DPwRClientTest {
         final Thread thread4 = new Thread(() -> {
             try {
                 final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                stress(50, 1000, latch, client);
+                stress(50, 500, latch, client);
             } catch (final CloseException | ControlException | TimeoutException e) {
                 e.printStackTrace();
             }
