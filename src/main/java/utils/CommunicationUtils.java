@@ -168,14 +168,12 @@ public class CommunicationUtils {
     public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
-            final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
-            awaitRequests(List.of(request), worker, timeoutMs);
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
 
             final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                final long request2 = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-                awaitRequests(List.of(request2), worker, timeoutMs);
+                final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+                awaitRequests(List.of(request), worker, timeoutMs);
             }
 
             final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
