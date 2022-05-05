@@ -261,6 +261,99 @@ public class DPwRClientTest {
 
     @Test
     @Order(14)
+    void testThreeKeysWithCollidingHashDeleteFromStart() {
+        final String key = "hash_collision_test_1";
+        final byte[] value = serialize("This is a value");
+        final String key2 = "hash_collision_test_2";
+        final byte[] value2 = serialize("This is a value2");
+        final String key3 = "hash_collision_test_3";
+        final byte[] value3 = serialize("This is a value3");
+
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+
+            client.del(key, timeoutMs, delAttempts);
+            client.put(key, value, timeoutMs, putAttempts);
+
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
+            assertArrayEquals(value3, response3);
+
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
+        });
+    }
+
+    @Test
+    @Order(15)
+    void testThreeKeysWithCollidingHashDeleteFromMiddle() {
+        final String key = "hash_collision_test_1";
+        final byte[] value = serialize("This is a value");
+        final String key2 = "hash_collision_test_2";
+        final byte[] value2 = serialize("This is a value2");
+        final String key3 = "hash_collision_test_3";
+        final byte[] value3 = serialize("This is a value3");
+
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+
+            client.del(key2, timeoutMs, delAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
+            assertArrayEquals(value3, response3);
+
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
+        });
+    }
+
+    @Test
+    @Order(15)
+    void testThreeKeysWithCollidingHashDeleteFromEnd() {
+        final String key = "hash_collision_test_1";
+        final byte[] value = serialize("This is a value");
+        final String key2 = "hash_collision_test_2";
+        final byte[] value2 = serialize("This is a value2");
+        final String key3 = "hash_collision_test_3";
+        final byte[] value3 = serialize("This is a value3");
+
+        assertDoesNotThrow(() -> {
+            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key2, value2, timeoutMs, putAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+
+            client.del(key3, timeoutMs, delAttempts);
+            client.put(key3, value3, timeoutMs, putAttempts);
+
+            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+            final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+            assertArrayEquals(value, response);
+            assertArrayEquals(value2, response2);
+            assertArrayEquals(value3, response3);
+
+            client.del(key, timeoutMs, delAttempts);
+            client.del(key2, timeoutMs, delAttempts);
+            client.del(key3, timeoutMs, delAttempts);
+        });
+    }
+
+    @Test
+    @Order(16)
     void testPutTimeout() {
         final String key = "timeout_test";
         final byte[] value = serialize("This is a value");
@@ -268,33 +361,33 @@ public class DPwRClientTest {
     }
 
     @Test
-    @Order(15)
+    @Order(17)
     void testGetTimeout() {
         final String key = "timeout_test";
         assertThrows(TimeoutException.class, () -> client.get(key, 100, getAttempts));
     }
 
     @Test
-    @Order(16)
+    @Order(18)
     void testDeleteTimeout() {
         final String key = "timeout_test";
         assertThrows(TimeoutException.class, () -> client.del(key, 100, delAttempts));
     }
 
     @Test
-    @Order(17)
+    @Order(19)
     void testCanPutMultipleTimes() {
         assertDoesNotThrow(() -> canPutMultipleTimes(1000, 0, client));
     }
 
     @Test
-    @Order(18)
+    @Order(20)
     void testCanGetMultipleTimes() {
         assertDoesNotThrow(() -> canGetMultipleTimes(1000, 0, client));
     }
 
     @Test
-    @Order(19)
+    @Order(21)
     void testCanDeleteMultipleTimes() {
         assertDoesNotThrow(() -> canDeleteMultipleTimes(1000, 0, client));
     }
