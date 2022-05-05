@@ -51,9 +51,10 @@ public class DPwRClient {
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
-        try (resources; final Endpoint endpoint = createEndpoint(key)) {
+        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(); final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler))) {
             putOperation(key, value, timeoutMs, endpoint);
-        } catch (final CloseException | ControlException | TimeoutException e) {
+        } catch (final ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -63,9 +64,10 @@ public class DPwRClient {
     }
 
     public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
-        try (resources; final Endpoint endpoint = createEndpoint(key)) {
+        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(); final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler))) {
             return getOperation(key, timeoutMs, endpoint);
-        } catch (final CloseException | ControlException | TimeoutException | SerializationException e) {
+        } catch (final ControlException | TimeoutException | SerializationException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -75,9 +77,10 @@ public class DPwRClient {
     }
 
     public void del(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
-        try (resources; final Endpoint endpoint = createEndpoint(key)) {
+        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(); final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler))) {
             delOperation(key, timeoutMs, endpoint);
-        } catch (final CloseException | ControlException | TimeoutException e) {
+        } catch (final ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -86,10 +89,10 @@ public class DPwRClient {
         }
     }
 
-    private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, CloseException, ControlException {
-        try (resources; final Endpoint endpoint = createEndpoint(serverHostAddress, serverPort)) {
+    private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, ControlException {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope(); final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(new InetSocketAddress(serverHostAddress, serverPort)).setErrorHandler(this.errorHandler))) {
             infOperation(500, endpoint);
-        } catch (final CloseException | ControlException | TimeoutException e) {
+        } catch (final ControlException | TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
@@ -179,25 +182,7 @@ public class DPwRClient {
         if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
-        log.info("Del completed\n");
-    }
-
-    private Endpoint createEndpoint(final String key) throws ControlException {
-        // Determining responsible server
-        final Integer responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
-
-        // Creating Endpoint
-        log.info("Connecting to {}", this.serverMap.get(responsibleServerID));
-        final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(this.serverMap.get(responsibleServerID)).setPeerErrorHandlingMode();
-        return this.worker.createEndpoint(endpointParams);
-    }
-
-    private Endpoint createEndpoint(final String serverHostAddress, final int serverPort) throws ControlException {
-        // Creating Endpoint
-        final InetSocketAddress address = new InetSocketAddress(serverHostAddress, serverPort);
-        log.info("Connecting to {}", address);
-        final EndpointParameters endpointParams = new EndpointParameters().setRemoteAddress(address).setPeerErrorHandlingMode();
-        return this.worker.createEndpoint(endpointParams);
+        log.info("Del completed");
     }
 
     private void resetWorker() {
