@@ -2,7 +2,6 @@ package client;
 
 import de.hhu.bsinfo.infinileap.binding.*;
 import de.hhu.bsinfo.infinileap.util.CloseException;
-import de.hhu.bsinfo.infinileap.util.ResourcePool;
 import exceptions.DuplicateKeyException;
 import exceptions.NotFoundException;
 import jdk.incubator.foreign.ResourceScope;
@@ -23,13 +22,11 @@ import static utils.HashUtils.getResponsibleServerID;
 
 @Slf4j
 public class DPwRClient {
-    private final ResourcePool resources = new ResourcePool();
+    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
     private final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private final ErrorHandler errorHandler = new DPwRErrorHandler();
     private Context context;
     private Worker worker;
-
-    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
 
     public DPwRClient(final String serverHostAddress, final Integer serverPort) throws CloseException, ControlException, TimeoutException {
         NativeLogger.enable();
@@ -104,7 +101,7 @@ public class DPwRClient {
     private void infOperation(final int timeoutMs, final Endpoint endpoint) throws TimeoutException {
         final int tagID = receiveTagID(worker, timeoutMs);
         sendStatusCode(tagID, "INF", endpoint, worker, timeoutMs);
-        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
+        receiveStatusCode(tagID, worker, timeoutMs);
         final int serverCount = receiveTagID(worker, timeoutMs);
         for (int i = 0; i < serverCount; i++) {
             final InetSocketAddress serverAddress = receiveAddress(tagID, worker, timeoutMs);
@@ -136,9 +133,8 @@ public class DPwRClient {
         } else if ("409".equals(statusCode)) {
             throw new DuplicateKeyException("An object with that key was already in the plasma store");
         }
-        log.info("Put completed\n");
+        log.info("Put completed");
     }
-
 
     private byte[] getOperation(final String key, final int timeoutMs, final Endpoint endpoint) throws ControlException, NotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
@@ -161,7 +157,7 @@ public class DPwRClient {
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
-        log.info("Get completed\n");
+        log.info("Get completed");
         return value;
     }
 
