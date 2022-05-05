@@ -9,6 +9,7 @@ import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
+import utils.DPwRErrorHandler;
 
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
@@ -24,6 +25,7 @@ import static utils.HashUtils.getResponsibleServerID;
 public class DPwRClient {
     private final ResourcePool resources = new ResourcePool();
     private final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
+    private final ErrorHandler errorHandler = new DPwRErrorHandler();
     private Context context;
     private Worker worker;
 
