@@ -48,19 +48,25 @@ public class DPwRClient {
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+        boolean retry = false;
         final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
         final ResourceScope scope = ResourceScope.newConfinedScope();
         final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
         try {
             putOperation(key, value, timeoutMs, endpoint);
         } catch (final ControlException | TimeoutException | SerializationException e) {
-            if (maxAttempts == 1) {
+            if (maxAttempts > 1) {
+                retry = true;
+            } else {
                 throw e;
             }
-            put(key, value, timeoutMs, maxAttempts - 1);
         } finally {
             tearDownEndpoint(endpoint, worker, timeoutMs);
             scope.close();
+            resetWorker();
+        }
+        if (retry) {
+            put(key, value, timeoutMs, maxAttempts - 1);
         }
     }
 
@@ -198,6 +204,7 @@ public class DPwRClient {
         }
         log.info("Del completed");
     }
+
     private void resetWorker() {
         this.worker.close();
         final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
