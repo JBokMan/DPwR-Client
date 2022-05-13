@@ -19,13 +19,12 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class DPwRClientTest {
 
-    DPwRClient client;
     final String serverHostAddress = "localhost";
     final Integer serverPort = 2998;
-
-    final Integer timeoutMs = 5000;
+    final Integer timeoutMs = 500;
     final Integer putAttempts = 5;
     final Integer getAttempts = 5;
+    DPwRClient client;
     Integer delAttempts = 5;
 
     @BeforeAll
