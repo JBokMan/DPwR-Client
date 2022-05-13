@@ -53,20 +53,14 @@ public class DPwRClient {
         final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
         try {
             putOperation(key, value, timeoutMs, endpoint);
-        } catch (final ControlException | TimeoutException e) {
+        } catch (final ControlException | TimeoutException | SerializationException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
-            resetWorker();
             put(key, value, timeoutMs, maxAttempts - 1);
-        }
-        try {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(endpoint.flush());
-            requests.add(endpoint.closeNonBlocking());
-            awaitRequests(requests, worker, timeoutMs);
-        } catch (final TimeoutException e) {
-            log.warn(e.getMessage());
+        } finally {
+            tearDownEndpoint(endpoint, worker, timeoutMs);
+            scope.close();
         }
     }
 
@@ -81,17 +75,10 @@ public class DPwRClient {
             if (maxAttempts == 1) {
                 throw e;
             }
-            resetWorker();
             return get(key, timeoutMs, maxAttempts - 1);
-        }
-        try {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(endpoint.flush());
-            requests.add(endpoint.closeNonBlocking());
-            awaitRequests(requests, worker, timeoutMs);
-        } catch (final TimeoutException e) {
-            log.warn(e.getMessage());
-            return result;
+        } finally {
+            tearDownEndpoint(endpoint, worker, timeoutMs);
+            scope.close();
         }
         return result;
     }
@@ -103,32 +90,29 @@ public class DPwRClient {
         try {
             delOperation(key, timeoutMs, endpoint);
         } catch (final TimeoutException e) {
-            log.error(e.getMessage());
             if (maxAttempts == 1) {
                 throw e;
             }
-            resetWorker();
             del(key, timeoutMs, maxAttempts - 1);
-        }
-        try {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(endpoint.flush());
-            requests.add(endpoint.closeNonBlocking());
-            awaitRequests(requests, worker, timeoutMs);
-        } catch (final TimeoutException e) {
-            log.warn(e.getMessage());
+        } finally {
+            tearDownEndpoint(endpoint, worker, timeoutMs);
+            scope.close();
         }
     }
 
     private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, ControlException {
-        try (final ResourceScope scope = ResourceScope.newConfinedScope(); final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(new InetSocketAddress(serverHostAddress, serverPort)).setErrorHandler(this.errorHandler))) {
+        final ResourceScope scope = ResourceScope.newConfinedScope();
+        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(new InetSocketAddress(serverHostAddress, serverPort)).setErrorHandler(this.errorHandler));
+        try {
             infOperation(500, endpoint);
-        } catch (final ControlException | TimeoutException e) {
+        } catch (final TimeoutException e) {
             if (maxAttempts == 1) {
                 throw e;
             }
-            resetWorker();
             getNetworkInformation(serverHostAddress, serverPort, maxAttempts - 1);
+        } finally {
+            tearDownEndpoint(endpoint, worker, 500);
+            scope.close();
         }
     }
 
@@ -143,9 +127,7 @@ public class DPwRClient {
         }
         sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         log.info(String.valueOf(this.serverMap));
-        final ArrayList<Long> flushRequest = new ArrayList<>();
-        flushRequest.add(endpoint.flush());
-        awaitRequests(flushRequest, worker, timeoutMs);
+        tearDownEndpoint(endpoint, worker, timeoutMs);
     }
 
     public void putOperation(final String key, final byte[] value, final int timeoutMs, final Endpoint endpoint) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
@@ -190,7 +172,6 @@ public class DPwRClient {
         if ("200".equals(statusCode)) {
             value = receiveValuePerRDMA(tagID, endpoint, worker, timeoutMs);
             sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
-
         } else if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
@@ -215,11 +196,8 @@ public class DPwRClient {
         if ("404".equals(statusCode)) {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
-
-        sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         log.info("Del completed");
     }
-
     private void resetWorker() {
         this.worker.close();
         final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);

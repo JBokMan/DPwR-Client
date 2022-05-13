@@ -67,7 +67,7 @@ public class CommunicationUtils {
         }
         if (state(request) != COMPLETE) {
             worker.cancelRequest(request);
-            throw new TimeoutException("A timeout occurred while receiving data");
+            throw new TimeoutException("A timeout occurred while awaiting a request");
         } else {
             Requests.release(request);
         }
@@ -87,7 +87,7 @@ public class CommunicationUtils {
             }
         }
         if (timeoutHappened) {
-            throw new TimeoutException("A timeout occurred while sending data");
+            throw new TimeoutException("A timeout occurred while awaiting a request");
         }
     }
 
@@ -183,6 +183,16 @@ public class CommunicationUtils {
             log.info("Read \"{}\" from remote buffer", entry);
 
             return entry.value;
+        }
+    }
+
+    public static void tearDownEndpoint(final Endpoint endpoint, final Worker worker, final int timeoutMs) {
+        try {
+            final ArrayList<Long> requests = new ArrayList<>();
+            requests.add(endpoint.closeNonBlocking());
+            awaitRequests(requests, worker, timeoutMs);
+        } catch (final TimeoutException e) {
+            log.warn(e.getMessage());
         }
     }
 }
