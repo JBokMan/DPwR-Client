@@ -2,17 +2,9 @@ plugins {
     id 'java'
     id 'application'
     id 'idea'
-    id 'pmd'
 
     // jextract Plugin
     id 'io.github.krakowski.jextract' version '0.2.6'
-}
-
-pmd {
-    consoleOutput = true
-    toolVersion = "6.9.0"
-    rulesMinimumPriority = 5
-    ruleSets = ["category/java/errorprone.xml", "category/java/bestpractices.xml", "category/java/codestyle.xml"]
 }
 
 application {
