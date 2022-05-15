@@ -132,11 +132,7 @@ public class DPwRClient {
         }
         if (retry) {
             resetWorker();
-            switch (operationName) {
-                case "PUT" -> put(key, value, timeoutMs, maxAttempts - 1);
-                case "GET" -> result = get(key, timeoutMs, maxAttempts - 1);
-                case "DEL" -> del(key, timeoutMs, maxAttempts - 1);
-            }
+            processRequest(operationName, key , value, timeoutMs, maxAttempts - 1);
         }
         return result;
     }
