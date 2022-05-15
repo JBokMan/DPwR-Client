@@ -70,16 +70,16 @@ public class DPwRClient {
     }
 
     private void infOperation(final int timeoutMs, final Endpoint endpoint) throws TimeoutException {
+        log.info("Starting INF operation");
         final int tagID = receiveTagID(worker, timeoutMs);
         sendStatusCode(tagID, "INF", endpoint, worker, timeoutMs);
-        receiveStatusCode(tagID, worker, timeoutMs);
-        final int serverCount = receiveTagID(worker, timeoutMs);
+        final int serverCount = receiveServerCount(tagID, worker, timeoutMs);
         for (int i = 0; i < serverCount; i++) {
             final InetSocketAddress serverAddress = receiveAddress(tagID, worker, timeoutMs);
             this.serverMap.put(i, serverAddress);
         }
-        sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         log.info(String.valueOf(this.serverMap));
+        log.info("INF completed");
     }
 
     public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
