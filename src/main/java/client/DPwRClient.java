@@ -42,87 +42,15 @@ public class DPwRClient {
             final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
             this.worker = context.createWorker(workerParameters);
         } catch (final ControlException e) {
-            e.printStackTrace();
+            log.error(e.getMessage());
         }
         getNetworkInformation(serverHostAddress, serverPort, 5);
     }
 
-    public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
-        boolean retry = false;
-        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
-        final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
-        try {
-            putOperation(key, value, timeoutMs, endpoint);
-        } catch (final ControlException | TimeoutException | SerializationException e) {
-            if (maxAttempts > 1) {
-                retry = true;
-            } else {
-                throw e;
-            }
-        } finally {
-            tearDownEndpoint(endpoint, worker, timeoutMs);
-            scope.close();
-        }
-        if (retry) {
-            resetWorker();
-            put(key, value, timeoutMs, maxAttempts - 1);
-        }
-    }
-
-    public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
-        boolean retry = false;
-        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
-        final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
-        byte[] result = new byte[0];
-        try {
-            result = getOperation(key, timeoutMs, endpoint);
-        } catch (final ControlException | TimeoutException | SerializationException e) {
-            if (maxAttempts > 1) {
-                retry = true;
-            } else {
-                throw e;
-            }
-        } finally {
-            tearDownEndpoint(endpoint, worker, timeoutMs);
-            scope.close();
-        }
-        if (retry) {
-            resetWorker();
-            return get(key, timeoutMs, maxAttempts - 1);
-        } else {
-            return result;
-        }
-    }
-
-    public void del(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
-        boolean retry = false;
-        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
-        final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
-        try {
-            delOperation(key, timeoutMs, endpoint);
-        } catch (final TimeoutException e) {
-            if (maxAttempts > 1) {
-                retry = true;
-            } else {
-                throw e;
-            }
-        } finally {
-            tearDownEndpoint(endpoint, worker, timeoutMs);
-            scope.close();
-        }
-        if (retry) {
-            resetWorker();
-            del(key, timeoutMs, maxAttempts - 1);
-        }
-    }
-
     private void getNetworkInformation(final String serverHostAddress, final Integer serverPort, final int maxAttempts) throws TimeoutException, ControlException {
-        boolean retry = false;
         final ResourceScope scope = ResourceScope.newConfinedScope();
         final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(new InetSocketAddress(serverHostAddress, serverPort)).setErrorHandler(this.errorHandler));
+        boolean retry = false;
         try {
             infOperation(500, endpoint);
         } catch (final TimeoutException e) {
@@ -152,6 +80,65 @@ public class DPwRClient {
         }
         sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         log.info(String.valueOf(this.serverMap));
+    }
+
+    public void put(final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+        try {
+            processRequest("PUT", key, value, timeoutMs, maxAttempts);
+        } catch (final NotFoundException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    public byte[] get(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
+        byte[] result = new byte[0];
+        try {
+            result = processRequest("GET", key, new byte[0], timeoutMs, maxAttempts);
+        } catch (final DuplicateKeyException e) {
+            log.error(e.getMessage());
+        }
+        return result;
+    }
+
+    public void del(final String key, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
+        try {
+            processRequest("DEL", key, new byte[0], timeoutMs, maxAttempts);
+        } catch (final DuplicateKeyException e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
+        final ResourceScope scope = ResourceScope.newConfinedScope();
+        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
+        boolean retry = false;
+        byte[] result = new byte[0];
+        try {
+            switch (operationName) {
+                case "PUT" -> putOperation(key, value, timeoutMs, endpoint);
+                case "GET" -> result = getOperation(key, timeoutMs, endpoint);
+                case "DEL" -> delOperation(key, timeoutMs, endpoint);
+            }
+        } catch (final TimeoutException e) {
+            if (maxAttempts > 1) {
+                retry = true;
+            } else {
+                throw e;
+            }
+        } finally {
+            tearDownEndpoint(endpoint, worker, timeoutMs);
+            scope.close();
+        }
+        if (retry) {
+            resetWorker();
+            switch (operationName) {
+                case "PUT" -> put(key, value, timeoutMs, maxAttempts - 1);
+                case "GET" -> result = get(key, timeoutMs, maxAttempts - 1);
+                case "DEL" -> del(key, timeoutMs, maxAttempts - 1);
+            }
+        }
+        return result;
     }
 
     public void putOperation(final String key, final byte[] value, final int timeoutMs, final Endpoint endpoint) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
