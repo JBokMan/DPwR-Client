@@ -138,6 +138,10 @@ public class CommunicationUtils {
         return receiveInteger(0, worker, timeoutMs);
     }
 
+    public static int receiveServerCount(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+        return receiveInteger(tagID, worker, timeoutMs);
+    }
+
     public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
         final int addressSize = receiveInteger(tagID, worker, timeoutMs);
         final byte[] serverAddressBytes = receiveData(tagID, addressSize, worker, timeoutMs);
