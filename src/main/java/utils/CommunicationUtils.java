@@ -138,7 +138,7 @@ public class CommunicationUtils {
         return receiveInteger(0, worker, timeoutMs);
     }
 
-    public static int receiveServerCount(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static int receiveCount(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
         return receiveInteger(tagID, worker, timeoutMs);
     }
 
@@ -148,6 +148,11 @@ public class CommunicationUtils {
         return deserialize(serverAddressBytes);
     }
 
+    public static byte[] receiveHash(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+        final int hashSize = receiveInteger(tagID, worker, timeoutMs);
+        final byte[] hash = receiveData(tagID, hashSize, worker, timeoutMs);
+        return hash;
+    }
 
     public static String receiveStatusCode(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
         final byte[] statusCodeBytes = receiveData(tagID, 10, worker, timeoutMs);

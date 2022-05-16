@@ -11,10 +11,10 @@ import org.apache.commons.lang3.SerializationException;
 import utils.DPwRErrorHandler;
 
 import java.net.InetSocketAddress;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static utils.CommunicationUtils.*;
@@ -73,7 +73,7 @@ public class DPwRClient {
         log.info("Starting INF operation");
         final int tagID = receiveTagID(worker, timeoutMs);
         sendStatusCode(tagID, "INF", endpoint, worker, timeoutMs);
-        final int serverCount = receiveServerCount(tagID, worker, timeoutMs);
+        final int serverCount = receiveCount(tagID, worker, timeoutMs);
         for (int i = 0; i < serverCount; i++) {
             final InetSocketAddress serverAddress = receiveAddress(tagID, worker, timeoutMs);
             this.serverMap.put(i, serverAddress);
@@ -108,7 +108,38 @@ public class DPwRClient {
         }
     }
 
-    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+    public boolean contains(final String key, final int timeoutMs, final int maxAttempts) throws ControlException, TimeoutException {
+        boolean contains = false;
+        try {
+            final byte[] result = processRequest("CNT", key, new byte[0], timeoutMs, maxAttempts);
+            contains = Arrays.equals(result, new byte[1]);
+        } catch (final DuplicateKeyException | NotFoundException e) {
+            log.error(e.getMessage());
+        }
+        return contains;
+    }
+
+    public byte[] hash(final String key, final int timeoutMs, final int maxAttempts) throws NotFoundException, ControlException, TimeoutException {
+        byte[] result = new byte[0];
+        try {
+            result = processRequest("HSH", key, new byte[0], timeoutMs, maxAttempts);
+        } catch (final DuplicateKeyException e) {
+            log.error(e.getMessage());
+        }
+        return result;
+    }
+
+    public List<byte[]> list(final int timeoutMs, final int maxAttempts) throws ControlException, TimeoutException {
+        List<byte[]> result = List.of(new byte[0]);
+        try {
+            result = processListRequest(timeoutMs, maxAttempts);
+        } catch (final DuplicateKeyException | NotFoundException e) {
+            log.error(e.getMessage());
+        }
+        return result;
+    }
+
+    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
         final ResourceScope scope = ResourceScope.newConfinedScope();
         final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
@@ -119,8 +150,10 @@ public class DPwRClient {
                 case "PUT" -> putOperation(key, value, timeoutMs, endpoint);
                 case "GET" -> result = getOperation(key, timeoutMs, endpoint);
                 case "DEL" -> delOperation(key, timeoutMs, endpoint);
+                case "CNT" -> result = containsOperation(key, timeoutMs, endpoint);
+                case "HSH" -> result = hashOperation(key, timeoutMs, endpoint);
             }
-        } catch (final TimeoutException e) {
+        } catch (final TimeoutException | SerializationException e) {
             if (maxAttempts > 1) {
                 retry = true;
             } else {
@@ -132,8 +165,41 @@ public class DPwRClient {
         }
         if (retry) {
             resetWorker();
-            processRequest(operationName, key , value, timeoutMs, maxAttempts - 1);
+            processRequest(operationName, key, value, timeoutMs, maxAttempts - 1);
         }
+        return result;
+    }
+
+    public List<byte[]> processListRequest(final int timeoutMs, int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+        List<byte[]> result = List.of(new byte[0]);
+        for (final InetSocketAddress server : this.serverMap.values()) {
+            List<byte[]> result2 = List.of(new byte[0]);
+            boolean retry = true;
+            while (retry && maxAttempts >= 1) {
+                retry = false;
+                final ResourceScope scope = ResourceScope.newConfinedScope();
+                final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(server).setErrorHandler(errorHandler));
+
+                try {
+                    result2 = listOperation(timeoutMs, endpoint);
+                } catch (final TimeoutException e) {
+                    if (maxAttempts > 1) {
+                        retry = true;
+                    } else {
+                        throw e;
+                    }
+                } finally {
+                    tearDownEndpoint(endpoint, worker, timeoutMs);
+                    scope.close();
+                }
+                if (retry) {
+                    resetWorker();
+                    maxAttempts = maxAttempts - 1;
+                }
+            }
+            result = Stream.concat(result.stream(), result2.stream()).collect(Collectors.toList());
+        }
+
         return result;
     }
 
@@ -204,6 +270,71 @@ public class DPwRClient {
             throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
         log.info("Del completed");
+    }
+
+    private byte[] containsOperation(final String key, final int timeoutMs, final Endpoint endpoint) throws TimeoutException {
+        log.info("Starting CNT operation");
+        byte[] result = new byte[0];
+        final int tagID = receiveTagID(worker, timeoutMs);
+        final ArrayList<Long> requests = new ArrayList<>();
+
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requests.add(prepareToSendString(tagID, "CNT", endpoint, scope));
+            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+
+            awaitRequests(requests, worker, timeoutMs);
+        }
+
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
+
+        if ("200".equals(statusCode)) {
+            result = new byte[1];
+        }
+        log.info("CNT completed");
+        return result;
+    }
+
+    private byte[] hashOperation(final String key, final int timeoutMs, final Endpoint endpoint) throws NotFoundException, TimeoutException {
+        log.info("Starting HSH operation");
+        final byte[] result;
+        final int tagID = receiveTagID(worker, timeoutMs);
+        final ArrayList<Long> requests = new ArrayList<>();
+
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requests.add(prepareToSendString(tagID, "HSH", endpoint, scope));
+            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+
+            awaitRequests(requests, worker, timeoutMs);
+        }
+
+        final String statusCode = receiveStatusCode(tagID, worker, timeoutMs);
+
+        if ("404".equals(statusCode)) {
+            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        }
+        result = receiveHash(tagID, worker, timeoutMs);
+        log.info("HSH completed");
+        return result;
+    }
+
+    private List<byte[]> listOperation(final int timeoutMs, final Endpoint endpoint) throws TimeoutException, ControlException {
+        log.info("Starting LST operation");
+        final int tagID = receiveTagID(worker, timeoutMs);
+        final ArrayList<Long> requests = new ArrayList<>();
+
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requests.add(prepareToSendString(tagID, "LST", endpoint, scope));
+            awaitRequests(requests, worker, timeoutMs);
+        }
+
+        final ArrayList<byte[]> result = new ArrayList<>();
+        final int count = receiveCount(tagID, worker, timeoutMs);
+        for (int i = 0; i < count; i++) {
+            result.add(receiveValuePerRDMA(tagID, endpoint, worker, timeoutMs));
+        }
+
+        log.info("LST completed");
+        return result;
     }
 
     private void resetWorker() {
