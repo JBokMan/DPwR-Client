@@ -462,12 +462,6 @@ public class DPwRClientTest {
             final String key = "timeout_test";
             final byte[] value = serialize("This is a value");
             assertThrows(TimeoutException.class, () -> client.put(key, value, 100, putAttempts));
-
-            try {
-                client.del(key, 20000, delAttempts);
-            } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
-                System.err.println(e.getMessage());
-            }
         }
 
         @Test
