@@ -13,8 +13,6 @@ import utils.DPwRErrorHandler;
 import java.net.InetSocketAddress;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static utils.CommunicationUtils.*;
@@ -149,7 +147,7 @@ public class DPwRClient {
             switch (operationName) {
                 case "PUT" -> putOperation(key, value, timeoutMs, endpoint);
                 case "GET" -> result = getOperation(key, timeoutMs, endpoint);
-                case "DEL" -> delOperation(key, timeoutMs, endpoint);
+                case "DEL" -> deleteOperation(key, timeoutMs, endpoint);
                 case "CNT" -> result = containsOperation(key, timeoutMs, endpoint);
                 case "HSH" -> result = hashOperation(key, timeoutMs, endpoint);
             }
@@ -171,9 +169,8 @@ public class DPwRClient {
     }
 
     public List<byte[]> processListRequest(final int timeoutMs, int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
-        List<byte[]> result = List.of(new byte[0]);
+        final ArrayList<byte[]> result = new ArrayList<>();
         for (final InetSocketAddress server : this.serverMap.values()) {
-            List<byte[]> result2 = List.of(new byte[0]);
             boolean retry = true;
             while (retry && maxAttempts >= 1) {
                 retry = false;
@@ -181,7 +178,7 @@ public class DPwRClient {
                 final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(server).setErrorHandler(errorHandler));
 
                 try {
-                    result2 = listOperation(timeoutMs, endpoint);
+                    result.addAll(listOperation(timeoutMs, endpoint));
                 } catch (final TimeoutException e) {
                     if (maxAttempts > 1) {
                         retry = true;
@@ -197,7 +194,6 @@ public class DPwRClient {
                     maxAttempts = maxAttempts - 1;
                 }
             }
-            result = Stream.concat(result.stream(), result2.stream()).collect(Collectors.toList());
         }
 
         return result;
@@ -252,7 +248,7 @@ public class DPwRClient {
         return value;
     }
 
-    private void delOperation(final String key, final int timeoutMs, final Endpoint endpoint) throws NotFoundException, TimeoutException {
+    private void deleteOperation(final String key, final int timeoutMs, final Endpoint endpoint) throws NotFoundException, TimeoutException {
         log.info("Starting DEL operation");
         final int tagID = receiveTagID(worker, timeoutMs);
         final ArrayList<Long> requests = new ArrayList<>();
@@ -330,7 +326,8 @@ public class DPwRClient {
         final ArrayList<byte[]> result = new ArrayList<>();
         final int count = receiveCount(tagID, worker, timeoutMs);
         for (int i = 0; i < count; i++) {
-            result.add(receiveValuePerRDMA(tagID, endpoint, worker, timeoutMs));
+            result.add(receiveObjectPerRDMA(tagID, endpoint, worker, timeoutMs));
+            sendStatusCode(tagID, "200", endpoint, worker, timeoutMs);
         }
 
         log.info("LST completed");

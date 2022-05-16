@@ -142,7 +142,7 @@ public class CommunicationUtils {
         return receiveInteger(tagID, worker, timeoutMs);
     }
 
-    public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
         final int addressSize = receiveInteger(tagID, worker, timeoutMs);
         final byte[] serverAddressBytes = receiveData(tagID, addressSize, worker, timeoutMs);
         return deserialize(serverAddressBytes);
@@ -150,8 +150,7 @@ public class CommunicationUtils {
 
     public static byte[] receiveHash(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
         final int hashSize = receiveInteger(tagID, worker, timeoutMs);
-        final byte[] hash = receiveData(tagID, hashSize, worker, timeoutMs);
-        return hash;
+        return receiveData(tagID, hashSize, worker, timeoutMs);
     }
 
     public static String receiveStatusCode(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
@@ -169,7 +168,7 @@ public class CommunicationUtils {
         return descriptor;
     }
 
-    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) {
+    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) throws SerializationException {
         final byte[] data = new byte[objectBuffer.remaining()];
         objectBuffer.get(data);
         return deserialize(data);
@@ -192,6 +191,21 @@ public class CommunicationUtils {
             log.info("Read \"{}\" from remote buffer", entry);
 
             return entry.value;
+        }
+    }
+
+    public static byte[] receiveObjectPerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
+        log.info("Receiving Remote Key");
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
+
+            final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
+            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+                final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+                awaitRequests(List.of(request), worker, timeoutMs);
+            }
+
+            return targetBuffer.toArray(ValueLayout.JAVA_BYTE);
         }
     }
 
