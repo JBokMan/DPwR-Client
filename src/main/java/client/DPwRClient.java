@@ -76,7 +76,7 @@ public class DPwRClient {
             final InetSocketAddress serverAddress = receiveAddress(tagID, worker, timeoutMs);
             this.serverMap.put(i, serverAddress);
         }
-        log.info(String.valueOf(this.serverMap));
+        log.info(this.serverMap.entrySet().toString());
         log.info("INF completed");
     }
 
@@ -139,6 +139,7 @@ public class DPwRClient {
 
     public byte[] processRequest(final String operationName, final String key, final byte[] value, final int timeoutMs, final int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
+        log.info("Responsible server: {}", responsibleServer);
         final ResourceScope scope = ResourceScope.newConfinedScope();
         final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
         boolean retry = false;

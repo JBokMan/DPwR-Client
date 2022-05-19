@@ -1,7 +1,6 @@
 package utils;
 
 import lombok.extern.slf4j.Slf4j;
-import org.apache.commons.lang3.ArrayUtils;
 
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
@@ -13,26 +12,14 @@ import java.util.Arrays;
 public class HashUtils {
     private static final boolean TEST_MODE = true;
 
-    private static byte[] generateID(final String key, final byte[] idTailEndBytes) {
-        // Generate plasma object id
-        byte[] id = new byte[0];
+    private static byte[] getMD5Hash(final String text) {
+        final MessageDigest messageDigest;
         try {
-            id = getMD5Hash(key);
+            messageDigest = MessageDigest.getInstance("MD5");
         } catch (final NoSuchAlgorithmException e) {
             log.error("The MD5 hash algorithm was not found.", e);
-            //ToDo handle exception
+            return new byte[0];
         }
-        final byte[] fullID = ArrayUtils.addAll(id, idTailEndBytes);
-        log.info("FullID: {} of key: {}", fullID, key);
-        return fullID;
-    }
-
-    private static byte[] generateID(final String key) {
-        return generateID(key, new byte[4]);
-    }
-
-    private static byte[] getMD5Hash(final String text) throws NoSuchAlgorithmException {
-        final MessageDigest messageDigest = MessageDigest.getInstance("MD5");
         byte[] id = messageDigest.digest(text.getBytes(StandardCharsets.UTF_8));
         if (TEST_MODE) {
             if (text.contains("hash_collision_test")) {
@@ -56,9 +43,12 @@ public class HashUtils {
     }
 
     public static Integer getResponsibleServerID(final String key, final int serverCount) {
-        final byte[] id = generateID(key);
+        final byte[] id = getMD5Hash(key);
         final String idAsHexValues = bytesToHex(id);
         final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
+        log.info(idAsNumber.toString());
+        log.info(String.valueOf(serverCount));
+        log.info(String.valueOf(idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue()));
         return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
     }
 }
