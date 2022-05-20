@@ -10,7 +10,7 @@ import picocli.CommandLine.Option;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Callable;
 
-@Command(name = "dpwr_server", mixinStandardHelpOptions = true,
+@Command(name = "dpwr_client", mixinStandardHelpOptions = true,
         description = "Starts a DPwR server with the given address and port")
 public class Application implements Callable<Integer> {
     @Option(names = {"-c", "--connect"}, description = "The address of the server this client should connect to. Default is 127.0.0.1:2998")
