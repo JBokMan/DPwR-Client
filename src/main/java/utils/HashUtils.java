@@ -46,9 +46,6 @@ public class HashUtils {
         final byte[] id = getMD5Hash(key);
         final String idAsHexValues = bytesToHex(id);
         final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
-        log.info(idAsNumber.toString());
-        log.info(String.valueOf(serverCount));
-        log.info(String.valueOf(idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue()));
         return idAsNumber.remainder(BigInteger.valueOf(serverCount)).intValue();
     }
 }
