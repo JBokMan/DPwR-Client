@@ -7,6 +7,7 @@ import exceptions.NotFoundException;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
 
+import java.net.InetSocketAddress;
 import java.util.Arrays;
 import java.util.HexFormat;
 import java.util.List;
@@ -21,8 +22,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class DPwRClientTest {
 
-    final String serverHostAddress = "localhost";
-    final Integer serverPort = 2998;
+    final InetSocketAddress serverAddress = new InetSocketAddress("127.0.0.1", 2998);
     final Integer timeoutMs = 500;
     final Integer putAttempts = 5;
     final Integer getAttempts = 5;
@@ -31,14 +31,14 @@ public class DPwRClientTest {
 
     @BeforeAll
     void setup() throws CloseException, ControlException, TimeoutException {
-        client = new DPwRClient(serverHostAddress, serverPort);
+        client = new DPwRClient(serverAddress, timeoutMs, true);
     }
 
     private void canPutMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
             final byte[] value = serialize("This is a value" + i);
-            client.put(key, value, timeoutMs, putAttempts);
+            client.put(key, value, putAttempts);
         }
     }
 
@@ -46,7 +46,7 @@ public class DPwRClientTest {
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
             final byte[] value = serialize("This is a value" + i);
-            final byte[] response = client.get(key, timeoutMs, getAttempts);
+            final byte[] response = client.get(key, getAttempts);
             if (!Arrays.equals(value, response)) {
                 throw new Exception();
             }
@@ -56,7 +56,7 @@ public class DPwRClientTest {
     private void canDeleteMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws CloseException, NotFoundException, ControlException, TimeoutException {
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
-            client.del(key, timeoutMs, delAttempts);
+            client.del(key, delAttempts);
         }
     }
 
@@ -69,17 +69,17 @@ public class DPwRClientTest {
             final String key1 = "This is a key1";
             final String key2 = "This is a key2";
             try {
-                client.del(key, timeoutMs, delAttempts);
+                client.del(key, delAttempts);
             } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
                 System.err.println(e.getMessage());
             }
             try {
-                client.del(key1, timeoutMs, delAttempts);
+                client.del(key1, delAttempts);
             } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
                 System.err.println(e.getMessage());
             }
             try {
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key2, delAttempts);
             } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
                 System.err.println(e.getMessage());
             }
@@ -89,15 +89,15 @@ public class DPwRClientTest {
         void successfulPut() {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
-            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
+            assertDoesNotThrow(() -> client.put(key, value, putAttempts));
         }
 
         @Test
         void unsuccessfulPut() {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
-            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
-            assertThrows(DuplicateKeyException.class, () -> client.put(key, value, timeoutMs, putAttempts));
+            assertDoesNotThrow(() -> client.put(key, value, putAttempts));
+            assertThrows(DuplicateKeyException.class, () -> client.put(key, value, putAttempts));
         }
 
         @Test
@@ -105,8 +105,8 @@ public class DPwRClientTest {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
+                client.put(key, value, putAttempts);
+                final byte[] response = client.get(key, getAttempts);
                 assertArrayEquals(value, response);
             });
         }
@@ -114,30 +114,30 @@ public class DPwRClientTest {
         @Test
         void testUnsuccessfulGet() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.get(key, timeoutMs, getAttempts));
+            assertThrows(NotFoundException.class, () -> client.get(key, getAttempts));
         }
 
         @Test
         void testSuccessfulDelete() {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
-            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
-            assertDoesNotThrow(() -> client.del(key, timeoutMs, delAttempts));
+            assertDoesNotThrow(() -> client.put(key, value, putAttempts));
+            assertDoesNotThrow(() -> client.del(key, delAttempts));
         }
 
         @Test
         void testUnsuccessfulDelete() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.del(key, timeoutMs, delAttempts));
+            assertThrows(NotFoundException.class, () -> client.del(key, delAttempts));
         }
 
         @Test
         void testSuccessfulContains() {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
-            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
+            assertDoesNotThrow(() -> client.put(key, value, putAttempts));
             assertDoesNotThrow(() -> {
-                final boolean response = client.contains(key, timeoutMs, delAttempts);
+                final boolean response = client.contains(key, delAttempts);
                 assertTrue(response);
             });
         }
@@ -146,7 +146,7 @@ public class DPwRClientTest {
         void testUnsuccessfulContains() {
             final String key = "This is a key";
             assertDoesNotThrow(() -> {
-                final boolean response = client.contains(key, timeoutMs, delAttempts);
+                final boolean response = client.contains(key, delAttempts);
                 assertFalse(response);
             });
         }
@@ -156,9 +156,9 @@ public class DPwRClientTest {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
             final byte[] expected = HexFormat.of().parseHex("64fa7530c9b20949");
-            assertDoesNotThrow(() -> client.put(key, value, timeoutMs, putAttempts));
+            assertDoesNotThrow(() -> client.put(key, value, putAttempts));
             assertDoesNotThrow(() -> {
-                final byte[] response = client.hash(key, timeoutMs, getAttempts);
+                final byte[] response = client.hash(key, getAttempts);
                 assertArrayEquals(expected, response);
             });
         }
@@ -166,13 +166,13 @@ public class DPwRClientTest {
         @Test
         void testUnsuccessfulHash() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.hash(key, timeoutMs, getAttempts));
+            assertThrows(NotFoundException.class, () -> client.hash(key, getAttempts));
         }
 
         @Test
         void testEmptyList() {
             assertDoesNotThrow(() -> {
-                final List<byte[]> response = client.list(timeoutMs, delAttempts);
+                final List<byte[]> response = client.list(delAttempts);
                 assertEquals(0, response.size());
             });
         }
@@ -186,12 +186,12 @@ public class DPwRClientTest {
             final String key2 = "This is a key2";
             final byte[] value2 = serialize("This is a value2");
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key1, value1, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
+                client.put(key, value, putAttempts);
+                client.put(key1, value1, putAttempts);
+                client.put(key2, value2, putAttempts);
             });
             assertDoesNotThrow(() -> {
-                final List<byte[]> response = client.list(timeoutMs, delAttempts);
+                final List<byte[]> response = client.list(delAttempts);
                 assertEquals(3, response.size());
             });
         }
@@ -201,10 +201,10 @@ public class DPwRClientTest {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
+                client.put(key, value, putAttempts);
+                final byte[] response = client.get(key, getAttempts);
                 assertArrayEquals(value, response);
-                client.del(key, timeoutMs, delAttempts);
+                client.del(key, delAttempts);
             });
         }
 
@@ -216,16 +216,16 @@ public class DPwRClientTest {
             final byte[] value2 = serialize("This is a value2");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+                client.put(key, value, putAttempts);
+                client.put(key2, value2, putAttempts);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
 
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
             });
         }
 
@@ -237,16 +237,16 @@ public class DPwRClientTest {
             final byte[] value2 = serialize("This is a value2");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
 
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
             });
         }
 
@@ -260,20 +260,20 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-                final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
+                final byte[] response3 = client.get(key3, timeoutMs);
 
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
                 assertArrayEquals(value3, response3);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
+                client.del(key3, timeoutMs);
             });
         }
 
@@ -287,23 +287,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
 
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-                byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                final byte[] response2 = client.get(key2, timeoutMs);
+                byte[] response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value2, response2);
                 assertArrayEquals(value3, response3);
 
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key2, timeoutMs);
 
-                response3 = client.get(key3, timeoutMs, getAttempts);
+                response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value3, response3);
 
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key3, timeoutMs);
             });
         }
 
@@ -317,23 +317,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key3, timeoutMs);
 
-                byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
+                byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
 
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key2, timeoutMs);
 
-                response = client.get(key, timeoutMs, getAttempts);
+                response = client.get(key, timeoutMs);
                 assertArrayEquals(value, response);
 
-                client.del(key, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
             });
         }
 
@@ -347,23 +347,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key2, timeoutMs, delAttempts);
+                client.del(key2, timeoutMs);
 
-                byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                byte[] response = client.get(key, timeoutMs);
+                final byte[] response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value, response);
                 assertArrayEquals(value3, response3);
 
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key3, timeoutMs);
 
-                response = client.get(key, timeoutMs, getAttempts);
+                response = client.get(key, timeoutMs);
                 assertArrayEquals(value, response);
 
-                client.del(key, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
             });
         }
 
@@ -377,23 +377,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.put(key, value, timeoutMs, putAttempts);
+                client.del(key, timeoutMs);
+                client.put(key, value, timeoutMs);
 
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-                final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
+                final byte[] response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
                 assertArrayEquals(value3, response3);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
+                client.del(key3, timeoutMs);
             });
         }
 
@@ -407,23 +407,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key2, timeoutMs, delAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
+                client.del(key2, timeoutMs);
+                client.put(key2, value2, timeoutMs);
 
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-                final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
+                final byte[] response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
                 assertArrayEquals(value3, response3);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
+                client.del(key3, timeoutMs);
             });
         }
 
@@ -437,23 +437,23 @@ public class DPwRClientTest {
             final byte[] value3 = serialize("This is a value3");
 
             assertDoesNotThrow(() -> {
-                client.put(key, value, timeoutMs, putAttempts);
-                client.put(key2, value2, timeoutMs, putAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.put(key, value, timeoutMs);
+                client.put(key2, value2, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                client.del(key3, timeoutMs, delAttempts);
-                client.put(key3, value3, timeoutMs, putAttempts);
+                client.del(key3, timeoutMs);
+                client.put(key3, value3, timeoutMs);
 
-                final byte[] response = client.get(key, timeoutMs, getAttempts);
-                final byte[] response2 = client.get(key2, timeoutMs, getAttempts);
-                final byte[] response3 = client.get(key3, timeoutMs, getAttempts);
+                final byte[] response = client.get(key, timeoutMs);
+                final byte[] response2 = client.get(key2, timeoutMs);
+                final byte[] response3 = client.get(key3, timeoutMs);
                 assertArrayEquals(value, response);
                 assertArrayEquals(value2, response2);
                 assertArrayEquals(value3, response3);
 
-                client.del(key, timeoutMs, delAttempts);
-                client.del(key2, timeoutMs, delAttempts);
-                client.del(key3, timeoutMs, delAttempts);
+                client.del(key, timeoutMs);
+                client.del(key2, timeoutMs);
+                client.del(key3, timeoutMs);
             });
         }
 
@@ -461,19 +461,19 @@ public class DPwRClientTest {
         void testPutTimeout() {
             final String key = "timeout_test";
             final byte[] value = serialize("This is a value");
-            assertThrows(TimeoutException.class, () -> client.put(key, value, 100, putAttempts));
+            assertThrows(TimeoutException.class, () -> client.put(key, value, 100));
         }
 
         @Test
         void testGetTimeout() {
             final String key = "timeout_test";
-            assertThrows(TimeoutException.class, () -> client.get(key, 100, getAttempts));
+            assertThrows(TimeoutException.class, () -> client.get(key, 100));
         }
 
         @Test
         void testDeleteTimeout() {
             final String key = "timeout_test";
-            assertThrows(TimeoutException.class, () -> client.del(key, 100, delAttempts));
+            assertThrows(TimeoutException.class, () -> client.del(key, 100));
         }
     }
 
@@ -510,8 +510,8 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    assertDoesNotThrow(() -> testMultipleKeyValues(500, 1000, client));
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(1000, client));
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -519,8 +519,8 @@ public class DPwRClientTest {
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    assertDoesNotThrow(() -> testMultipleKeyValues(500, 2000, client));
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(2000, client));
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -540,8 +540,8 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    assertDoesNotThrow(() -> testMultipleKeyValues(500, 3000, client));
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(3000, client));
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -549,8 +549,8 @@ public class DPwRClientTest {
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    assertDoesNotThrow(() -> testMultipleKeyValues(500, 4000, client));
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(4000, client));
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -558,8 +558,8 @@ public class DPwRClientTest {
             });
             final Thread thread3 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    assertDoesNotThrow(() -> testMultipleKeyValues(500, 5000, client));
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(5000, client));
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -573,10 +573,10 @@ public class DPwRClientTest {
             assertDoesNotThrow(() -> latch.await());
         }
 
-        private void testMultipleKeyValues(final int count, final int startIndex, final DPwRClient client) throws Exception {
-            canPutMultipleTimes(count, startIndex, client);
-            canGetMultipleTimes(count, startIndex, client);
-            canDeleteMultipleTimes(count, startIndex, client);
+        private void testMultipleKeyValues(final int startIndex, final DPwRClient client) throws Exception {
+            canPutMultipleTimes(500, startIndex, client);
+            canGetMultipleTimes(500, startIndex, client);
+            canDeleteMultipleTimes(500, startIndex, client);
         }
     }
 
@@ -587,7 +587,7 @@ public class DPwRClientTest {
         public void cleanUp() {
             for (int i = 0; i < 50; i++) {
                 try {
-                    client.del("This is a key" + i, timeoutMs, delAttempts);
+                    client.del("This is a key" + i, timeoutMs);
                 } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
                     System.err.println(e.getMessage());
                 }
@@ -601,32 +601,32 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    stress(50, 500, latch, client);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    stress(latch, client);
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    stress(50, 500, latch, client);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    stress(latch, client);
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
             });
             final Thread thread3 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    stress(50, 500, latch, client);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    stress(latch, client);
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
             });
             final Thread thread4 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverHostAddress, serverPort);
-                    stress(50, 500, latch, client);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    stress(latch, client);
                 } catch (final CloseException | ControlException | TimeoutException e) {
                     e.printStackTrace();
                 }
@@ -640,18 +640,18 @@ public class DPwRClientTest {
             assertDoesNotThrow(() -> latch.await());
         }
 
-        private void stress(final int range, final int count, final CountDownLatch latch, final DPwRClient client) {
+        private void stress(final CountDownLatch latch, final DPwRClient client) {
             final Random random = new Random();
-            for (int i = 0; i < count; i++) {
-                final int index = random.ints(0, range).findFirst().getAsInt();
+            for (int i = 0; i < 500; i++) {
+                final int index = random.ints(0, 50).findFirst().orElse(0);
                 final String key = "This is a key" + index;
                 final byte[] value = serialize("This is a value" + index);
-                final int operationNumber = random.ints(0, 3).findFirst().getAsInt();
+                final int operationNumber = random.ints(0, 3).findFirst().orElse(0);
                 try {
                     switch (operationNumber) {
-                        case 0 -> client.put(key, value, timeoutMs, putAttempts);
-                        case 1 -> client.get(key, timeoutMs, getAttempts);
-                        case 2 -> client.del(key, timeoutMs, delAttempts);
+                        case 0 -> client.put(key, value, timeoutMs);
+                        case 1 -> client.get(key, timeoutMs);
+                        case 2 -> client.del(key, timeoutMs);
                     }
                 } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException |
                                TimeoutException e) {
