@@ -174,17 +174,22 @@ public class CommunicationUtils {
         return deserialize(data);
     }
 
+    private static MemorySegment prepareBufferAndGetBytes(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException, ControlException {
+        final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
+
+        final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
+        try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+            final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
+            awaitRequests(List.of(request), worker, timeoutMs);
+        }
+        return targetBuffer;
+    }
+
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
     public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
-
-            final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
-            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-                awaitRequests(List.of(request), worker, timeoutMs);
-            }
+            final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
 
             final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
             final PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
@@ -197,13 +202,7 @@ public class CommunicationUtils {
     public static byte[] receiveObjectPerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
-
-            final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
-            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-                awaitRequests(List.of(request), worker, timeoutMs);
-            }
+            final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
 
             return targetBuffer.toArray(ValueLayout.JAVA_BYTE);
         }
