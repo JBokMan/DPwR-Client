@@ -5,6 +5,8 @@ plugins {
 
     // jextract Plugin
     id 'io.github.krakowski.jextract' version '0.2.6'
+    // shadowJar Plugin
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 application {
