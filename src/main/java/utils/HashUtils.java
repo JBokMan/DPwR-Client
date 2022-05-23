@@ -42,7 +42,10 @@ public class HashUtils {
         return sb.toString();
     }
 
-    public static Integer getResponsibleServerID(final String key, final int serverCount) {
+    public static int getResponsibleServerID(final String key, final int serverCount) {
+        if(serverCount <= 0) {
+            return -1;
+        }
         final byte[] id = getMD5Hash(key);
         final String idAsHexValues = bytesToHex(id);
         final BigInteger idAsNumber = new BigInteger(idAsHexValues, 16);
