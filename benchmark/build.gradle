@@ -1,0 +1,39 @@
+plugins {
+    id 'java-library'
+    id 'application'
+}
+
+java {
+    toolchain {
+        languageVersion.set(JavaLanguageVersion.of(19))
+    }
+}
+
+mainClassName = 'de.hhu.edu.heinestore.benchmark.App'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+
+    // YCSB Core
+    api files('lib/ycsb.jar')
+    implementation 'org.apache.htrace:htrace-core4:4.1.0-incubating'
+    implementation 'org.hdrhistogram:HdrHistogram:2.1.4'
+    implementation 'org.codehaus.jackson:jackson-core-asl:1.9.4'
+    implementation 'org.codehaus.jackson:jackson-mapper-asl:1.9.4'
+
+    // Client Project
+    //implementation project(':client')
+
+    // Command Line Application Framework
+    implementation "info.picocli:picocli:4.6.3"
+
+    // Log4j Logger
+    implementation "org.apache.logging.log4j:log4j-slf4j-impl:2.17.2"
+
+    // Lombok
+    compileOnly "org.projectlombok:lombok:1.18.22"
+    annotationProcessor "org.projectlombok:lombok:1.18.22"
+}
