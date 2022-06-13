@@ -461,19 +461,19 @@ public class DPwRClientTest {
         void testPutTimeout() {
             final String key = "timeout_test";
             final byte[] value = serialize("This is a value");
-            assertThrows(TimeoutException.class, () -> client.put(key, value, 100));
+            assertThrows(TimeoutException.class, () -> client.put(key, value, 5));
         }
 
         @Test
         void testGetTimeout() {
             final String key = "timeout_test";
-            assertThrows(TimeoutException.class, () -> client.get(key, 100));
+            assertThrows(TimeoutException.class, () -> client.get(key, 5));
         }
 
         @Test
         void testDeleteTimeout() {
             final String key = "timeout_test";
-            assertThrows(TimeoutException.class, () -> client.del(key, 100));
+            assertThrows(TimeoutException.class, () -> client.del(key, 5));
         }
     }
 
