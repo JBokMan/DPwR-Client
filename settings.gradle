@@ -1,4 +1,4 @@
-rootProject.name = 'InfinimumDB-Client'
+rootProject.name = 'DPwR-Client'
 
 includeBuild "./infinileap"
 includeBuild "./benchmark"
