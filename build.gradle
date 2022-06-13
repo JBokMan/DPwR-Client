@@ -37,7 +37,7 @@ java {
 
 dependencies {
     implementation "de.hhu.bsinfo:core"
-    implementation "de.hhu.bsinfo:example"
+    implementation "de.hhu.bsinfo:common"
 
     // Lombok
     compileOnly 'org.projectlombok:lombok:1.18.24'

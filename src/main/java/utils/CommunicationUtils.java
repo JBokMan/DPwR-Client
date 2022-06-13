@@ -1,7 +1,7 @@
 package utils;
 
 import de.hhu.bsinfo.infinileap.binding.*;
-import de.hhu.bsinfo.infinileap.example.util.Requests;
+import de.hhu.bsinfo.infinileap.util.Requests;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import jdk.incubator.foreign.ValueLayout;
@@ -16,9 +16,9 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
-import static de.hhu.bsinfo.infinileap.example.util.Requests.State.COMPLETE;
-import static de.hhu.bsinfo.infinileap.example.util.Requests.State.ERROR;
-import static de.hhu.bsinfo.infinileap.example.util.Requests.state;
+import static de.hhu.bsinfo.infinileap.util.Requests.State.COMPLETE;
+import static de.hhu.bsinfo.infinileap.util.Requests.State.ERROR;
+import static de.hhu.bsinfo.infinileap.util.Requests.state;
 import static org.apache.commons.lang3.SerializationUtils.deserialize;
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 
