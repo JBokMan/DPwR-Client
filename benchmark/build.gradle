@@ -9,8 +9,6 @@ java {
     }
 }
 
-mainClassName = 'de.hhu.edu.heinestore.benchmark.App'
-
 repositories {
     mavenCentral()
 }
@@ -18,14 +16,14 @@ repositories {
 dependencies {
 
     // YCSB Core
-    api files('lib/ycsb.jar')
+    implementation 'site.ycsb:core:0.17.0'
     implementation 'org.apache.htrace:htrace-core4:4.1.0-incubating'
     implementation 'org.hdrhistogram:HdrHistogram:2.1.4'
     implementation 'org.codehaus.jackson:jackson-core-asl:1.9.4'
     implementation 'org.codehaus.jackson:jackson-mapper-asl:1.9.4'
 
     // Client Project
-    //implementation project(':client')
+    implementation project(':client')
 
     // Command Line Application Framework
     implementation "info.picocli:picocli:4.6.3"

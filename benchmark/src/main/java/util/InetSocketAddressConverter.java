@@ -1,4 +1,4 @@
-package de.hhu.edu.heinestore.benchmark.util;
+package util;
 
 import de.hhu.edu.heinestore.common.util.Constants;
 import picocli.CommandLine;

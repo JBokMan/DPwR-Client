@@ -1,6 +1,6 @@
-package de.hhu.edu.heinestore.benchmark.binding;
+package binding;
 
-import de.hhu.edu.heinestore.benchmark.base.KeyValueStore;
+import base.KeyValueStore;
 import de.hhu.edu.heinestore.client.base.KeyValueClient;
 import de.hhu.edu.heinestore.common.exception.KeyNotFoundException;
 import de.hhu.edu.heinestore.common.exception.NetworkException;

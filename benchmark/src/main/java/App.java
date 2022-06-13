@@ -1,7 +1,5 @@
-package de.hhu.edu.heinestore.benchmark;
-
-import de.hhu.edu.heinestore.benchmark.runner.BenchmarkRunner;
-import de.hhu.edu.heinestore.benchmark.util.InetSocketAddressConverter;
+import runner.BenchmarkRunner;
+import util.InetSocketAddressConverter;
 import de.hhu.edu.heinestore.common.util.Constants;
 import picocli.CommandLine;
 

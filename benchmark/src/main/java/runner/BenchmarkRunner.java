@@ -1,6 +1,6 @@
-package de.hhu.edu.heinestore.benchmark.runner;
+package runner;
 
-import de.hhu.edu.heinestore.benchmark.base.KeyValueStore;
+import base.KeyValueStore;
 import lombok.extern.slf4j.Slf4j;
 import picocli.CommandLine;
 import site.ycsb.Client;
@@ -16,7 +16,7 @@ import java.util.ArrayList;
 )
 public class BenchmarkRunner implements Runnable {
 
-    private static final String BINDING_CLASS = "de.hhu.edu.heinestore.benchmark.binding.HeineStoreBinding";
+    private static final String BINDING_CLASS = "binding.HeineStoreBinding";
     private static final String JSON_EXPORTER = "site.ycsb.measurements.exporter.JSONMeasurementsExporter";
 
     @CommandLine.Option(

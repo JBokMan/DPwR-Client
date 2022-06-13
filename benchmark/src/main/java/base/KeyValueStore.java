@@ -1,6 +1,6 @@
-package de.hhu.edu.heinestore.benchmark.base;
+package base;
 
-import de.hhu.edu.heinestore.benchmark.util.InetSocketAddressConverter;
+import util.InetSocketAddressConverter;
 import de.hhu.edu.heinestore.common.exception.KeyNotFoundException;
 import de.hhu.edu.heinestore.common.exception.NetworkException;
 import site.ycsb.*;
