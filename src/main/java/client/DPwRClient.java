@@ -184,7 +184,7 @@ public class DPwRClient {
         }
         if (retry) {
             resetWorker();
-            processRequest(operationName, key, value, maxAttempts - 1);
+            return processRequest(operationName, key, value, maxAttempts - 1);
         }
         return result;
     }
