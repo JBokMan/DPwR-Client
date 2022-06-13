@@ -1,4 +1,5 @@
 rootProject.name = 'DPwR-Client'
 
 includeBuild "./infinileap"
-includeBuild "./benchmark"
+include 'client'
+
