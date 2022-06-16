@@ -1,12 +1,23 @@
 package client;
 
-import de.hhu.bsinfo.infinileap.binding.*;
+import de.hhu.bsinfo.infinileap.binding.Context;
+import de.hhu.bsinfo.infinileap.binding.ContextParameters;
+import de.hhu.bsinfo.infinileap.binding.ControlException;
+import de.hhu.bsinfo.infinileap.binding.Endpoint;
+import de.hhu.bsinfo.infinileap.binding.EndpointParameters;
+import de.hhu.bsinfo.infinileap.binding.ErrorHandler;
+import de.hhu.bsinfo.infinileap.binding.NativeLogger;
+import de.hhu.bsinfo.infinileap.binding.ThreadMode;
+import de.hhu.bsinfo.infinileap.binding.Worker;
+import de.hhu.bsinfo.infinileap.binding.WorkerParameters;
 import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
-import exceptions.NotFoundException;
+import exceptions.KeyNotFoundException;
+import exceptions.NetworkException;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
+import org.apache.commons.lang3.ObjectUtils;
 import org.apache.commons.lang3.SerializationException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
@@ -14,13 +25,30 @@ import org.apache.logging.log4j.core.config.LoggerConfig;
 import utils.DPwRErrorHandler;
 
 import java.net.InetSocketAddress;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.apache.logging.log4j.Level.INFO;
-import static org.apache.logging.log4j.Level.WARN;
-import static utils.CommunicationUtils.*;
+import static org.apache.logging.log4j.Level.OFF;
+import static utils.CommunicationUtils.awaitRequests;
+import static utils.CommunicationUtils.prepareToSendInteger;
+import static utils.CommunicationUtils.prepareToSendKey;
+import static utils.CommunicationUtils.prepareToSendString;
+import static utils.CommunicationUtils.receiveAddress;
+import static utils.CommunicationUtils.receiveCount;
+import static utils.CommunicationUtils.receiveHash;
+import static utils.CommunicationUtils.receiveObjectPerRDMA;
+import static utils.CommunicationUtils.receiveStatusCode;
+import static utils.CommunicationUtils.receiveTagID;
+import static utils.CommunicationUtils.receiveValuePerRDMA;
+import static utils.CommunicationUtils.sendEntryPerRDMA;
+import static utils.CommunicationUtils.sendStatusCode;
+import static utils.CommunicationUtils.tearDownEndpoint;
 import static utils.HashUtils.getResponsibleServerID;
 
 @Slf4j
@@ -28,17 +56,44 @@ public class DPwRClient {
     private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
     private final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private final ErrorHandler errorHandler = new DPwRErrorHandler();
-    private final int serverTimeout;
+    private InetSocketAddress serverAddress = null;
+    private Integer serverTimeout = null;
+    private Boolean verbose = null;
     private Context context;
     private Worker worker;
 
-    public DPwRClient(final InetSocketAddress serverAddress, final int serverTimeout, final boolean verbose) throws CloseException, ControlException, TimeoutException {
+    public DPwRClient() {
+
+    }
+
+    public DPwRClient(final InetSocketAddress serverAddress, final int serverTimeout, final boolean verbose) throws NetworkException {
+        this.serverAddress = serverAddress;
         this.serverTimeout = serverTimeout;
+        this.verbose = verbose;
+        initialize();
+    }
+
+    public void setServerAddress(final InetSocketAddress serverAddress) {
+        this.serverAddress = serverAddress;
+    }
+
+    public void setServerTimeout(final int serverTimeout) {
+        this.serverTimeout = serverTimeout;
+    }
+
+    public void setVerbose(final boolean verbose) {
+        this.verbose = verbose;
+    }
+
+    public void initialize() throws NetworkException {
+        if (ObjectUtils.isEmpty(this.serverAddress) || ObjectUtils.isEmpty(this.serverAddress) || ObjectUtils.isEmpty(this.serverAddress)) {
+            throw new IllegalStateException("Client is not properly set up, either the server address, server timeout or verbose state is missing");
+        }
         NativeLogger.enable();
         if (verbose) {
             setLogLevel(INFO);
         } else {
-            setLogLevel(WARN);
+            setLogLevel(OFF);
         }
         log.info("Using UCX version {}", Context.getVersion());
         try {
@@ -65,9 +120,14 @@ public class DPwRClient {
         ctx.updateLoggers();
     }
 
-    private void getNetworkInformation(final InetSocketAddress serverAddress, final int maxAttempts) throws TimeoutException, ControlException {
+    private void getNetworkInformation(final InetSocketAddress serverAddress, final int maxAttempts) throws NetworkException {
         final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler));
+        final Endpoint endpoint;
+        try {
+            endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler));
+        } catch (final ControlException e) {
+            throw new NetworkException(e.getMessage());
+        }
         boolean retry = false;
         try {
             infOperation(endpoint);
@@ -75,7 +135,7 @@ public class DPwRClient {
             if (maxAttempts > 1) {
                 retry = true;
             } else {
-                throw e;
+                throw new NetworkException(e.getMessage());
             }
         } finally {
             tearDownEndpoint(endpoint, worker, 500);
@@ -100,29 +160,29 @@ public class DPwRClient {
         log.info("INF completed");
     }
 
-    public void put(final String key, final byte[] value, final int maxAttempts) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+    public void put(final String key, final byte[] value, final int maxAttempts) throws NetworkException, DuplicateKeyException {
         try {
             processRequest("PUT", key, value, maxAttempts);
-        } catch (final NotFoundException e) {
-            log.error(e.getMessage());
+        } catch (final KeyNotFoundException | ControlException | TimeoutException e) {
+            throw new NetworkException(e.getMessage());
         }
     }
 
-    public byte[] get(final String key, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException, SerializationException {
-        byte[] result = new byte[0];
+    public byte[] get(final String key, final int maxAttempts) throws NetworkException, KeyNotFoundException {
+        final byte[] result;
         try {
             result = processRequest("GET", key, new byte[0], maxAttempts);
-        } catch (final DuplicateKeyException e) {
-            log.error(e.getMessage());
+        } catch (final DuplicateKeyException | KeyNotFoundException | ControlException | TimeoutException e) {
+            throw new NetworkException(e.getMessage());
         }
         return result;
     }
 
-    public void del(final String key, final int maxAttempts) throws CloseException, NotFoundException, ControlException, TimeoutException {
+    public void del(final String key, final int maxAttempts) throws NetworkException, KeyNotFoundException {
         try {
             processRequest("DEL", key, new byte[0], maxAttempts);
-        } catch (final DuplicateKeyException e) {
-            log.error(e.getMessage());
+        } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
+            throw new NetworkException(e.getMessage());
         }
     }
 
@@ -131,13 +191,13 @@ public class DPwRClient {
         try {
             final byte[] result = processRequest("CNT", key, new byte[0], maxAttempts);
             contains = Arrays.equals(result, new byte[1]);
-        } catch (final DuplicateKeyException | NotFoundException e) {
+        } catch (final DuplicateKeyException | KeyNotFoundException e) {
             log.error(e.getMessage());
         }
         return contains;
     }
 
-    public byte[] hash(final String key, final int maxAttempts) throws NotFoundException, ControlException, TimeoutException {
+    public byte[] hash(final String key, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException {
         byte[] result = new byte[0];
         try {
             result = processRequest("HSH", key, new byte[0], maxAttempts);
@@ -151,13 +211,13 @@ public class DPwRClient {
         List<byte[]> result = List.of(new byte[0]);
         try {
             result = processListRequest(maxAttempts);
-        } catch (final DuplicateKeyException | NotFoundException e) {
+        } catch (final DuplicateKeyException | KeyNotFoundException e) {
             log.error(e.getMessage());
         }
         return result;
     }
 
-    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
         log.info("Responsible server: {}", responsibleServer);
         final ResourceScope scope = ResourceScope.newConfinedScope();
@@ -190,7 +250,7 @@ public class DPwRClient {
     }
 
     @SuppressWarnings("TryFinallyCanBeTryWithResources")
-    public List<byte[]> processListRequest(int maxAttempts) throws NotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+    public List<byte[]> processListRequest(int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final ArrayList<byte[]> result = new ArrayList<>();
         for (final InetSocketAddress server : this.serverMap.values()) {
             boolean retry = true;
@@ -246,7 +306,7 @@ public class DPwRClient {
         log.info("Put completed");
     }
 
-    private byte[] getOperation(final String key, final Endpoint endpoint) throws ControlException, NotFoundException, TimeoutException, SerializationException {
+    private byte[] getOperation(final String key, final Endpoint endpoint) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
         final int tagID = receiveTagID(worker, serverTimeout);
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -264,13 +324,13 @@ public class DPwRClient {
             value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
             sendStatusCode(tagID, "200", endpoint, worker, serverTimeout);
         } else if ("404".equals(statusCode)) {
-            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
         log.info("Get completed");
         return value;
     }
 
-    private void deleteOperation(final String key, final Endpoint endpoint) throws NotFoundException, TimeoutException {
+    private void deleteOperation(final String key, final Endpoint endpoint) throws KeyNotFoundException, TimeoutException {
         log.info("Starting DEL operation");
         final int tagID = receiveTagID(worker, serverTimeout);
         final ArrayList<Long> requests = new ArrayList<>();
@@ -285,7 +345,7 @@ public class DPwRClient {
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
 
         if ("404".equals(statusCode)) {
-            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
         log.info("Del completed");
     }
@@ -312,7 +372,7 @@ public class DPwRClient {
         return result;
     }
 
-    private byte[] hashOperation(final String key, final Endpoint endpoint) throws NotFoundException, TimeoutException {
+    private byte[] hashOperation(final String key, final Endpoint endpoint) throws KeyNotFoundException, TimeoutException {
         log.info("Starting HSH operation");
         final byte[] result;
         final int tagID = receiveTagID(worker, serverTimeout);
@@ -328,7 +388,7 @@ public class DPwRClient {
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
 
         if ("404".equals(statusCode)) {
-            throw new NotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
         }
         result = receiveHash(tagID, worker, serverTimeout);
         log.info("HSH completed");

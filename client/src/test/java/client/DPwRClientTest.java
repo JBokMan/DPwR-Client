@@ -1,11 +1,18 @@
 package client;
 
-import de.hhu.bsinfo.infinileap.binding.ControlException;
-import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
-import exceptions.NotFoundException;
-import org.junit.jupiter.api.*;
+import exceptions.KeyNotFoundException;
+import exceptions.NetworkException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
+import org.junit.jupiter.api.TestMethodOrder;
+import org.junit.jupiter.api.Timeout;
 
 import java.net.InetSocketAddress;
 import java.util.Arrays;
@@ -16,7 +23,12 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 
 import static org.apache.commons.lang3.SerializationUtils.serialize;
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @TestInstance(Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -30,11 +42,11 @@ public class DPwRClientTest {
     Integer delAttempts = 5;
 
     @BeforeAll
-    void setup() throws CloseException, ControlException, TimeoutException {
+    void setup() throws NetworkException {
         client = new DPwRClient(serverAddress, timeoutMs, true);
     }
 
-    private void canPutMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws CloseException, ControlException, DuplicateKeyException, TimeoutException {
+    private void canPutMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws NetworkException, DuplicateKeyException {
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
             final byte[] value = serialize("This is a value" + i);
@@ -53,7 +65,7 @@ public class DPwRClientTest {
         }
     }
 
-    private void canDeleteMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws CloseException, NotFoundException, ControlException, TimeoutException {
+    private void canDeleteMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws NetworkException, KeyNotFoundException {
         for (int i = startIndex; i < startIndex + count; i++) {
             final String key = "This is a key" + i;
             client.del(key, delAttempts);
@@ -70,17 +82,17 @@ public class DPwRClientTest {
             final String key2 = "This is a key2";
             try {
                 client.del(key, delAttempts);
-            } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
+            } catch (final KeyNotFoundException | NetworkException e) {
                 System.err.println(e.getMessage());
             }
             try {
                 client.del(key1, delAttempts);
-            } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
+            } catch (final KeyNotFoundException | NetworkException e) {
                 System.err.println(e.getMessage());
             }
             try {
                 client.del(key2, delAttempts);
-            } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
+            } catch (final KeyNotFoundException | NetworkException e) {
                 System.err.println(e.getMessage());
             }
         }
@@ -114,7 +126,7 @@ public class DPwRClientTest {
         @Test
         void testUnsuccessfulGet() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.get(key, getAttempts));
+            assertThrows(KeyNotFoundException.class, () -> client.get(key, getAttempts));
         }
 
         @Test
@@ -128,7 +140,7 @@ public class DPwRClientTest {
         @Test
         void testUnsuccessfulDelete() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.del(key, delAttempts));
+            assertThrows(KeyNotFoundException.class, () -> client.del(key, delAttempts));
         }
 
         @Test
@@ -166,7 +178,7 @@ public class DPwRClientTest {
         @Test
         void testUnsuccessfulHash() {
             final String key = "This is a key";
-            assertThrows(NotFoundException.class, () -> client.hash(key, getAttempts));
+            assertThrows(KeyNotFoundException.class, () -> client.hash(key, getAttempts));
         }
 
         @Test
@@ -512,8 +524,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     assertDoesNotThrow(() -> testMultipleKeyValues(1000, client));
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
                 latch.countDown();
             });
@@ -521,8 +533,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     assertDoesNotThrow(() -> testMultipleKeyValues(2000, client));
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
                 latch.countDown();
             });
@@ -542,8 +554,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     assertDoesNotThrow(() -> testMultipleKeyValues(3000, client));
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
                 latch.countDown();
             });
@@ -551,8 +563,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     assertDoesNotThrow(() -> testMultipleKeyValues(4000, client));
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
                 latch.countDown();
             });
@@ -560,8 +572,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     assertDoesNotThrow(() -> testMultipleKeyValues(5000, client));
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
                 latch.countDown();
             });
@@ -588,7 +600,7 @@ public class DPwRClientTest {
             for (int i = 0; i < 50; i++) {
                 try {
                     client.del("This is a key" + i, timeoutMs);
-                } catch (final CloseException | TimeoutException | ControlException | NotFoundException e) {
+                } catch (final KeyNotFoundException | NetworkException e) {
                     System.err.println(e.getMessage());
                 }
             }
@@ -603,32 +615,32 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     stress(latch, client);
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
             });
             final Thread thread2 = new Thread(() -> {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     stress(latch, client);
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
             });
             final Thread thread3 = new Thread(() -> {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     stress(latch, client);
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
             });
             final Thread thread4 = new Thread(() -> {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
                     stress(latch, client);
-                } catch (final CloseException | ControlException | TimeoutException e) {
-                    e.printStackTrace();
+                } catch (final NetworkException e) {
+                    throw new RuntimeException(e);
                 }
             });
 
@@ -653,8 +665,7 @@ public class DPwRClientTest {
                         case 1 -> client.get(key, timeoutMs);
                         case 2 -> client.del(key, timeoutMs);
                     }
-                } catch (final CloseException | NotFoundException | ControlException | DuplicateKeyException |
-                               TimeoutException e) {
+                } catch (final KeyNotFoundException | DuplicateKeyException | NetworkException e) {
                     System.out.println(e.getMessage());
                 }
             }
