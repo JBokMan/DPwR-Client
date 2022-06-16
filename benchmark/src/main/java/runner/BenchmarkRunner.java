@@ -16,12 +16,12 @@ import java.util.ArrayList;
 )
 public class BenchmarkRunner implements Runnable {
 
-    private static final String BINDING_CLASS = "binding.HeineStoreBinding";
+    private static final String BINDING_CLASS = "binding.DPwRStoreBinding";
     private static final String JSON_EXPORTER = "site.ycsb.measurements.exporter.JSONMeasurementsExporter";
 
     @CommandLine.Option(
             names = {"-c", "--connect"},
-            description = "The HeineStore server's ip address and port.",
+            description = "The DPwRStore server's ip address and port.",
             required = true)
     private InetSocketAddress serverAddress;
 
@@ -42,7 +42,7 @@ public class BenchmarkRunner implements Runnable {
     }
 
     private String[] generateParameters() {
-        var parameters = new ArrayList<String>();
+        final var parameters = new ArrayList<String>();
 
         // Run transaction phase
         parameters.add("-t");

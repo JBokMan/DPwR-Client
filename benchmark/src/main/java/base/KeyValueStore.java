@@ -1,8 +1,8 @@
 package base;
 
+import exceptions.KeyNotFoundException;
+import exceptions.NetworkException;
 import util.InetSocketAddressConverter;
-import de.hhu.edu.heinestore.common.exception.KeyNotFoundException;
-import de.hhu.edu.heinestore.common.exception.NetworkException;
 import site.ycsb.*;
 
 import java.net.InetSocketAddress;
@@ -15,18 +15,18 @@ public abstract class KeyValueStore extends DB {
 
     private static final String NAMESPACE_SEPARATOR = ".";
 
-    public static final String ADDRESS_KEY = "de.hhu.edu.heinestore.benchmark.server";
+    public static final String ADDRESS_KEY = "org.jb.dpwr.benchmark.server";
 
     @Override
     public void init() throws DBException {
-        var address = getProperties().getProperty(ADDRESS_KEY);
+        final var address = getProperties().getProperty(ADDRESS_KEY);
         if (address == null) {
             throw new RuntimeException("The server address is not set. Please set it using the " + ADDRESS_KEY + " property.");
         }
 
         try {
             initialize(InetSocketAddressConverter.from(address));
-        } catch (NetworkException e) {
+        } catch (final NetworkException e) {
             throw new DBException("Initializing client connection failed.", e);
         }
     }
@@ -73,14 +73,14 @@ public abstract class KeyValueStore extends DB {
     public abstract Status delete(String key) throws NetworkException, KeyNotFoundException;
 
     @Override
-    public Status read(String table, String key, Set<String> fields, Map<String, ByteIterator> result) {
+    public Status read(final String table, final String key, final Set<String> fields, final Map<String, ByteIterator> result) {
         if (fields != null && fields.size() != 1) {
             System.err.println("Field counts other than 1 are not supported!");
             return Status.BAD_REQUEST;
         }
 
         try {
-            var value = get(generateKey(table, key));
+            final var value = get(generateKey(table, key));
 
             if (fields == null) {
                 result.put("field0", new ByteArrayByteIterator(value));
@@ -89,21 +89,21 @@ public abstract class KeyValueStore extends DB {
             }
 
             return Status.OK;
-        } catch (NetworkException e) {
+        } catch (final NetworkException e) {
             return Status.SERVICE_UNAVAILABLE;
-        } catch (KeyNotFoundException e) {
+        } catch (final KeyNotFoundException e) {
             return Status.NOT_FOUND;
         }
     }
 
     @Override
-    public Status scan(String table, String startkey, int recordcount, Set<String> fields,
-                       Vector<HashMap<String, ByteIterator>> result) {
+    public Status scan(final String table, final String startkey, final int recordcount, final Set<String> fields,
+                       final Vector<HashMap<String, ByteIterator>> result) {
         return Status.NOT_IMPLEMENTED;
     }
 
     @Override
-    public Status update(String table, String key, Map<String, ByteIterator> values) {
+    public Status update(final String table, final String key, final Map<String, ByteIterator> values) {
         if (values.size() != 1) {
             System.err.println("Field counts other than 1 are not supported!");
             return Status.BAD_REQUEST;
@@ -111,13 +111,13 @@ public abstract class KeyValueStore extends DB {
 
         try {
             return put(generateKey(table, key), values.values().iterator().next().toArray());
-        } catch (NetworkException e) {
+        } catch (final NetworkException e) {
             return Status.SERVICE_UNAVAILABLE;
         }
     }
 
     @Override
-    public Status insert(String table, String key, Map<String, ByteIterator> values) {
+    public Status insert(final String table, final String key, final Map<String, ByteIterator> values) {
         if (values.size() != 1) {
             System.err.println("Field counts other than 1 are not supported!");
             return Status.BAD_REQUEST;
@@ -127,17 +127,17 @@ public abstract class KeyValueStore extends DB {
     }
 
     @Override
-    public Status delete(String table, String key) {
+    public Status delete(final String table, final String key) {
         try {
             return delete(generateKey(table, key));
-        } catch (NetworkException e) {
+        } catch (final NetworkException e) {
             return Status.SERVICE_UNAVAILABLE;
-        } catch (KeyNotFoundException e) {
+        } catch (final KeyNotFoundException e) {
             return Status.NOT_FOUND;
         }
     }
 
-    private static String generateKey(String table, String key) {
+    private static String generateKey(final String table, final String key) {
         return table.concat(NAMESPACE_SEPARATOR).concat(key);
     }
 }
