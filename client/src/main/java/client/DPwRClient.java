@@ -172,7 +172,7 @@ public class DPwRClient {
         final byte[] result;
         try {
             result = processRequest("GET", key, new byte[0], maxAttempts);
-        } catch (final DuplicateKeyException | KeyNotFoundException | ControlException | TimeoutException e) {
+        } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
         }
         return result;
