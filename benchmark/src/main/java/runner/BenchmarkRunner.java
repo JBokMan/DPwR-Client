@@ -47,6 +47,17 @@ public class BenchmarkRunner implements Runnable {
         // Run transaction phase
         parameters.add("-t");
 
+        // Run load phase
+        //parameters.add("-load");
+
+        // Set thread count
+        parameters.add("-threads");
+        parameters.add("1");
+
+        // Set target operation count per second
+        //parameters.add("-target");
+        //parameters.add("100");
+
         // Set server address
         parameters.add("-p");
         parameters.add(String.format("%s=%s:%d", KeyValueStore.ADDRESS_KEY,
