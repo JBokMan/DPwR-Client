@@ -48,16 +48,17 @@ public class DPwRStoreBinding extends KeyValueStore {
      * @param key   The key, under which the object shall be stored.
      * @param value The object to store.
      * @return A YCSB {@link Status} code.
-     * @throws NetworkException If the network connection fails.
      */
     @Override
-    public Status put(final String key, final byte[] value) throws NetworkException {
+    public Status put(final String key, final byte[] value) {
         try {
             client.put(key, value, 5);
         } catch (final DuplicateKeyException e) {
-            throw new NetworkException(e.getMessage());
+            return Status.BAD_REQUEST;
+        } catch (final NetworkException e) {
+            return Status.SERVICE_UNAVAILABLE;
         }
-        return new Status("201 Created", "The key was saved successfully");
+        return Status.OK;
     }
 
     /**
@@ -65,12 +66,16 @@ public class DPwRStoreBinding extends KeyValueStore {
      *
      * @param key The key to be deleted.
      * @return A YCSB {@link Status} code.
-     * @throws NetworkException     If the network connection fails.
-     * @throws KeyNotFoundException If the specified key does not exist.
      */
     @Override
-    public Status delete(final String key) throws NetworkException, KeyNotFoundException {
-        client.del(key, 5);
-        return new Status("204 No Content", "Value was successfully deleted");
+    public Status delete(final String key) {
+        try {
+            client.del(key, 5);
+        } catch (final KeyNotFoundException e) {
+            return Status.NOT_FOUND;
+        } catch (final NetworkException e) {
+            return Status.SERVICE_UNAVAILABLE;
+        }
+        return Status.OK;
     }
 }

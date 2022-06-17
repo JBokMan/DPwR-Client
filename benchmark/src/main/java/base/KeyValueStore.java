@@ -2,8 +2,12 @@ package base;
 
 import exceptions.KeyNotFoundException;
 import exceptions.NetworkException;
+import site.ycsb.ByteArrayByteIterator;
+import site.ycsb.ByteIterator;
+import site.ycsb.DB;
+import site.ycsb.DBException;
+import site.ycsb.Status;
 import util.InetSocketAddressConverter;
-import site.ycsb.*;
 
 import java.net.InetSocketAddress;
 import java.util.HashMap;
@@ -13,9 +17,12 @@ import java.util.Vector;
 
 public abstract class KeyValueStore extends DB {
 
+    public static final String ADDRESS_KEY = "org.jb.dpwr.benchmark.server";
     private static final String NAMESPACE_SEPARATOR = ".";
 
-    public static final String ADDRESS_KEY = "org.jb.dpwr.benchmark.server";
+    private static String generateKey(final String table, final String key) {
+        return table.concat(NAMESPACE_SEPARATOR).concat(key);
+    }
 
     @Override
     public void init() throws DBException {
@@ -43,9 +50,8 @@ public abstract class KeyValueStore extends DB {
      * Retrieves an object.
      *
      * @param key The key, under which the object is stored.
-     *
      * @return The object.
-     * @throws NetworkException If the network connection fails.
+     * @throws NetworkException     If the network connection fails.
      * @throws KeyNotFoundException If the specified key does not exist.
      */
     public abstract byte[] get(String key) throws NetworkException, KeyNotFoundException;
@@ -53,9 +59,8 @@ public abstract class KeyValueStore extends DB {
     /**
      * Stores an object.
      *
-     * @param key The key, under which the object shall be stored.
+     * @param key   The key, under which the object shall be stored.
      * @param value The object to store.
-     *
      * @return A YCSB {@link Status} code.
      * @throws NetworkException If the network connection fails.
      */
@@ -65,9 +70,8 @@ public abstract class KeyValueStore extends DB {
      * Deletes the given key.
      *
      * @param key The key to be deleted.
-     *
      * @return A YCSB {@link Status} code.
-     * @throws NetworkException If the network connection fails.
+     * @throws NetworkException     If the network connection fails.
      * @throws KeyNotFoundException If the specified key does not exist.
      */
     public abstract Status delete(String key) throws NetworkException, KeyNotFoundException;
@@ -108,12 +112,15 @@ public abstract class KeyValueStore extends DB {
             System.err.println("Field counts other than 1 are not supported!");
             return Status.BAD_REQUEST;
         }
-
+        final String _key = generateKey(table, key);
         try {
-            return put(generateKey(table, key), values.values().iterator().next().toArray());
+            delete(_key);
         } catch (final NetworkException e) {
             return Status.SERVICE_UNAVAILABLE;
+        } catch (final KeyNotFoundException e) {
+            return Status.NOT_FOUND;
         }
+        return insert(table, key, values);
     }
 
     @Override
@@ -123,7 +130,11 @@ public abstract class KeyValueStore extends DB {
             return Status.BAD_REQUEST;
         }
 
-        return update(table, key, values);
+        try {
+            return put(generateKey(table, key), values.values().iterator().next().toArray());
+        } catch (final NetworkException e) {
+            return Status.SERVICE_UNAVAILABLE;
+        }
     }
 
     @Override
@@ -135,10 +146,6 @@ public abstract class KeyValueStore extends DB {
         } catch (final KeyNotFoundException e) {
             return Status.NOT_FOUND;
         }
-    }
-
-    private static String generateKey(final String table, final String key) {
-        return table.concat(NAMESPACE_SEPARATOR).concat(key);
     }
 }
 
