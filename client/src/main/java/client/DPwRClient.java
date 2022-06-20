@@ -207,7 +207,7 @@ public class DPwRClient {
         return result;
     }
 
-    public List<byte[]> list(final int maxAttempts) throws ControlException, TimeoutException {
+    public List<byte[]> list(final int maxAttempts) throws ControlException, TimeoutException, NetworkException {
         List<byte[]> result = List.of(new byte[0]);
         try {
             result = processListRequest(maxAttempts);
@@ -250,7 +250,7 @@ public class DPwRClient {
     }
 
     @SuppressWarnings("TryFinallyCanBeTryWithResources")
-    public List<byte[]> processListRequest(int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+    public List<byte[]> processListRequest(int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException, NetworkException {
         final ArrayList<byte[]> result = new ArrayList<>();
         for (final InetSocketAddress server : this.serverMap.values()) {
             boolean retry = true;
@@ -275,6 +275,9 @@ public class DPwRClient {
                     resetWorker();
                     maxAttempts = maxAttempts - 1;
                 }
+            }
+            if (maxAttempts == 0) {
+                throw new NetworkException("Connection lost");
             }
         }
 
