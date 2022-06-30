@@ -1,0 +1,11 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Benchmark Run" type="Application" factoryName="Application">
+    <option name="MAIN_CLASS_NAME" value="main.Application" />
+    <module name="DPwR-Client.benchmark.main" />
+    <option name="PROGRAM_PARAMETERS" value="-c &quot;localhost:2998&quot; -p &quot;$PROJECT_DIR$/benchmark/src/main/dist/workloads/sample-workload&quot;" />
+    <option name="VM_PARAMETERS" value="--add-modules jdk.incubator.foreign --enable-native-access=ALL-UNNAMED" />
+    <method v="2">
+      <option name="Make" enabled="true" />
+    </method>
+  </configuration>
+</component>
