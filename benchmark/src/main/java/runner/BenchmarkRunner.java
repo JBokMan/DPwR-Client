@@ -18,19 +18,20 @@ public class BenchmarkRunner implements Runnable {
 
     private static final String BINDING_CLASS = "binding.DPwRStoreBinding";
     private static final String JSON_EXPORTER = "site.ycsb.measurements.exporter.JSONMeasurementsExporter";
-
+    @CommandLine.Option(
+            names = {"-l", "--load"},
+            description = "Should load the workload")
+    private boolean load = false;
     @CommandLine.Option(
             names = {"-c", "--connect"},
             description = "The DPwRStore server's ip address and port.",
             required = true)
     private InetSocketAddress serverAddress;
-
     @CommandLine.Option(
             names = {"-p", "--properties"},
             description = "The properties file.",
             required = true)
     private Path properties;
-
     @CommandLine.Option(
             names = {"-e", "--export"},
             description = "The export file.")
@@ -47,8 +48,10 @@ public class BenchmarkRunner implements Runnable {
         // Run transaction phase
         parameters.add("-t");
 
-        // Run load phase
-        //parameters.add("-load");
+        if (load) {
+            // Run load phase
+            parameters.add("-load");
+        }
 
         // Set thread count
         parameters.add("-threads");
