@@ -1,12 +1,19 @@
 plugins {
     id 'java-library'
     id 'application'
+
+    // shadowJar Plugin
+    id 'com.github.johnrengelman.shadow' version '7.1.2'
 }
 
 java {
     toolchain {
         languageVersion.set(JavaLanguageVersion.of(19))
     }
+}
+
+application {
+    mainClass = 'main/App'
 }
 
 repositories {

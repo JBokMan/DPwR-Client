@@ -1,10 +1,12 @@
+package main;
+
 import runner.BenchmarkRunner;
 import util.InetSocketAddressConverter;
 import picocli.CommandLine;
 
 import java.net.InetSocketAddress;
 
-public class App {
+public class Application {
 
     public static void main(final String[] args) {
         final var exitCode = new CommandLine(new BenchmarkRunner())
