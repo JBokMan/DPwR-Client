@@ -21,7 +21,7 @@ public class BenchmarkRunner implements Runnable {
     @CommandLine.Option(
             names = {"-l", "--load"},
             description = "Should load the workload")
-    private final boolean load = false;
+    private boolean load = false;
     @CommandLine.Option(
             names = {"-c", "--connect"},
             description = "The DPwRStore server's ip address and port.",
@@ -40,17 +40,17 @@ public class BenchmarkRunner implements Runnable {
     @CommandLine.Option(
             names = {"-s", "--status"},
             description = "Log status while benchmarking")
-    private final boolean status = false;
+    private boolean status = false;
 
     @CommandLine.Option(
             names = {"-t", "--threads"},
             description = "count of threads running the benchmark")
-    private final int threads = 1;
+    private int threads = 1;
 
     @CommandLine.Option(
             names = {"-a", "--target"},
             description = "Target operation per second")
-    private final int target = 999999999;
+    private int target = 999999999;
 
     @Override
     public void run() {
