@@ -21,7 +21,7 @@ public class BenchmarkRunner implements Runnable {
     @CommandLine.Option(
             names = {"-l", "--load"},
             description = "Should load the workload")
-    private boolean load = false;
+    private final boolean load = false;
     @CommandLine.Option(
             names = {"-c", "--connect"},
             description = "The DPwRStore server's ip address and port.",
@@ -36,6 +36,21 @@ public class BenchmarkRunner implements Runnable {
             names = {"-e", "--export"},
             description = "The export file.")
     private Path export;
+
+    @CommandLine.Option(
+            names = {"-s", "--status"},
+            description = "Log status while benchmarking")
+    private final boolean status = false;
+
+    @CommandLine.Option(
+            names = {"-t", "--threads"},
+            description = "count of threads running the benchmark")
+    private final int threads = 1;
+
+    @CommandLine.Option(
+            names = {"-a", "--target"},
+            description = "Target operation per second")
+    private final int target = 999999999;
 
     @Override
     public void run() {
@@ -53,13 +68,17 @@ public class BenchmarkRunner implements Runnable {
             parameters.add("-load");
         }
 
+        if (status) {
+            parameters.add("-s");
+        }
+
         // Set thread count
         parameters.add("-threads");
-        parameters.add("1");
+        parameters.add(String.valueOf(threads));
 
         // Set target operation count per second
-        //parameters.add("-target");
-        //parameters.add("100");
+        parameters.add("-target");
+        parameters.add(String.valueOf(target));
 
         // Set server address
         parameters.add("-p");
@@ -69,7 +88,7 @@ public class BenchmarkRunner implements Runnable {
         // Write results to file if path was set
         if (export != null) {
             parameters.add("-p");
-            parameters.add(String.format("exportfile=%s", export.toAbsolutePath().toString()));
+            parameters.add(String.format("exportfile=%s", export.toAbsolutePath()));
             parameters.add("-p");
             parameters.add(String.format("exporter=%s", JSON_EXPORTER));
         }
