@@ -10,7 +10,6 @@ import de.hhu.bsinfo.infinileap.binding.NativeLogger;
 import de.hhu.bsinfo.infinileap.binding.ThreadMode;
 import de.hhu.bsinfo.infinileap.binding.Worker;
 import de.hhu.bsinfo.infinileap.binding.WorkerParameters;
-import de.hhu.bsinfo.infinileap.util.CloseException;
 import exceptions.DuplicateKeyException;
 import exceptions.KeyNotFoundException;
 import exceptions.NetworkException;
@@ -61,6 +60,8 @@ public class DPwRClient {
     private Boolean verbose = null;
     private Context context;
     private Worker worker;
+    private Endpoint endpoint;
+    private int tagID;
 
     public DPwRClient() {
 
@@ -70,7 +71,6 @@ public class DPwRClient {
         this.serverAddress = serverAddress;
         this.serverTimeout = serverTimeout;
         this.verbose = verbose;
-        initialize();
     }
 
     public void setServerAddress(final InetSocketAddress serverAddress) {
@@ -96,10 +96,11 @@ public class DPwRClient {
             setLogLevel(OFF);
         }
         log.info("Using UCX version {}", Context.getVersion());
+
+        // Initialize UCP context
+        log.info("Initializing context");
+        final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET);
         try {
-            // Initialize UCP context
-            log.info("Initializing context");
-            final ContextParameters contextParameters = new ContextParameters().setFeatures(FEATURE_SET);
             this.context = Context.initialize(contextParameters, null);
 
             // Create a worker
@@ -107,9 +108,33 @@ public class DPwRClient {
             final WorkerParameters workerParameters = new WorkerParameters().setThreadMode(ThreadMode.SINGLE);
             this.worker = context.createWorker(workerParameters);
         } catch (final ControlException e) {
-            log.error(e.getMessage());
+            throw new NetworkException(e.getMessage());
         }
-        getNetworkInformation(serverAddress, 5);
+
+        try {
+            establishConnection(5);
+        } catch (final ControlException | TimeoutException e) {
+            throw new NetworkException(e.getMessage());
+        }
+        getNetworkInformation(5);
+    }
+
+    private void establishConnection(final int attempts) throws ControlException, TimeoutException {
+        // Create an endpoint
+        log.info("Creating Endpoint");
+        final EndpointParameters endpointParameters = new EndpointParameters().setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler);
+
+        try {
+            this.endpoint = this.worker.createEndpoint(endpointParameters);
+            this.tagID = receiveTagID(worker, serverTimeout);
+        } catch (final ControlException | TimeoutException e) {
+            log.error(e.getMessage());
+            if (attempts > 0) {
+                establishConnection(attempts - 1);
+            } else {
+                throw e;
+            }
+        }
     }
 
     private void setLogLevel(final org.apache.logging.log4j.Level level) {
@@ -120,36 +145,24 @@ public class DPwRClient {
         ctx.updateLoggers();
     }
 
-    private void getNetworkInformation(final InetSocketAddress serverAddress, final int maxAttempts) throws NetworkException {
-        final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint;
-        try {
-            endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler));
-        } catch (final ControlException e) {
-            throw new NetworkException(e.getMessage());
-        }
+    private void getNetworkInformation(final int maxAttempts) throws NetworkException {
         boolean retry = false;
         try {
-            infOperation(endpoint);
+            infOperation();
         } catch (final TimeoutException e) {
             if (maxAttempts > 1) {
                 retry = true;
             } else {
                 throw new NetworkException(e.getMessage());
             }
-        } finally {
-            tearDownEndpoint(endpoint, worker, 500);
-            scope.close();
         }
         if (retry) {
-            resetWorker();
-            getNetworkInformation(serverAddress, maxAttempts - 1);
+            getNetworkInformation(maxAttempts - 1);
         }
     }
 
-    private void infOperation(final Endpoint endpoint) throws TimeoutException {
+    private void infOperation() throws TimeoutException {
         log.info("Starting INF operation");
-        final int tagID = receiveTagID(worker, serverTimeout);
         sendStatusCode(tagID, "INF", endpoint, worker, serverTimeout);
         final int serverCount = receiveCount(tagID, worker, serverTimeout);
         for (int i = 0; i < serverCount; i++) {
@@ -173,6 +186,7 @@ public class DPwRClient {
         try {
             result = processRequest("GET", key, new byte[0], maxAttempts);
         } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
+            e.printStackTrace();
             throw new NetworkException(e.getMessage());
         }
         return result;
@@ -183,6 +197,16 @@ public class DPwRClient {
             processRequest("DEL", key, new byte[0], maxAttempts);
         } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
+        }
+    }
+
+    public void closeConnection(final int maxAttempts) throws NetworkException {
+        try {
+            processRequest("BYE", "", new byte[0], maxAttempts);
+        } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
+            throw new NetworkException(e.getMessage());
+        } catch (final KeyNotFoundException e) {
+            throw new RuntimeException(e);
         }
     }
 
@@ -220,30 +244,28 @@ public class DPwRClient {
     public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
         log.info("Responsible server: {}", responsibleServer);
-        final ResourceScope scope = ResourceScope.newConfinedScope();
-        final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(responsibleServer).setErrorHandler(errorHandler));
+        // lookup in server endpoint map
         boolean retry = false;
         byte[] result = new byte[0];
         try {
             switch (operationName) {
-                case "PUT" -> putOperation(key, value, endpoint);
-                case "GET" -> result = getOperation(key, endpoint);
-                case "DEL" -> deleteOperation(key, endpoint);
-                case "CNT" -> result = containsOperation(key, endpoint);
-                case "HSH" -> result = hashOperation(key, endpoint);
+                case "PUT" -> putOperation(key, value);
+                case "GET" -> result = getOperation(key);
+                case "DEL" -> deleteOperation(key);
+                case "CNT" -> result = containsOperation(key);
+                case "HSH" -> result = hashOperation(key);
+                case "BYE" -> closeConnectionOperation();
             }
         } catch (final TimeoutException | SerializationException e) {
+            log.warn(e.getMessage());
             if (maxAttempts > 1) {
                 retry = true;
             } else {
                 throw e;
             }
-        } finally {
-            tearDownEndpoint(endpoint, worker, serverTimeout);
-            scope.close();
         }
         if (retry) {
-            resetWorker();
+            log.warn("Retry " + operationName);
             return processRequest(operationName, key, value, maxAttempts - 1);
         }
         return result;
@@ -284,9 +306,8 @@ public class DPwRClient {
         return result;
     }
 
-    public void putOperation(final String key, final byte[] value, final Endpoint endpoint) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
+    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
         log.info("Starting PUT operation");
-        final int tagID = receiveTagID(worker, serverTimeout);
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -300,18 +321,25 @@ public class DPwRClient {
 
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
 
-        if ("200".equals(statusCode)) {
-            sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout);
-            sendStatusCode(tagID, "200", endpoint, worker, serverTimeout);
-        } else if ("409".equals(statusCode)) {
-            throw new DuplicateKeyException("An object with that key was already in the plasma store");
+        switch (statusCode) {
+            case "200" -> {
+                sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout);
+                sendStatusCode(tagID, "201", endpoint, worker, serverTimeout);
+                final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
+                switch (resultStatusCode) {
+                    case "202" -> log.info("Success");
+                    case "401", "402" -> throw new TimeoutException("Something went wrong");
+                    default -> throw new TimeoutException("Wrong status code: " + statusCode);
+                }
+            }
+            case "400" -> throw new DuplicateKeyException("An object with that key was already in the plasma store");
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
         log.info("Put completed");
     }
 
-    private byte[] getOperation(final String key, final Endpoint endpoint) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
+    private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
-        final int tagID = receiveTagID(worker, serverTimeout);
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final ArrayList<Long> requests = new ArrayList<>();
             requests.add(prepareToSendString(tagID, "GET", endpoint, scope));
@@ -320,22 +348,31 @@ public class DPwRClient {
             awaitRequests(requests, worker, serverTimeout);
         }
 
+        final byte[] value;
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-
-        byte[] value = new byte[0];
-        if ("200".equals(statusCode)) {
-            value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
-            sendStatusCode(tagID, "200", endpoint, worker, serverTimeout);
-        } else if ("404".equals(statusCode)) {
-            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        switch (statusCode) {
+            case "211" -> {
+                value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
+                sendStatusCode(tagID, "212", endpoint, worker, serverTimeout);
+            }
+            case "411" ->
+                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
+
+        final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
+        switch (resultStatusCode) {
+            case "213" -> log.info("Success");
+            case "412" -> throw new TimeoutException("Something went wrong");
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
+        }
+
         log.info("Get completed");
         return value;
     }
 
-    private void deleteOperation(final String key, final Endpoint endpoint) throws KeyNotFoundException, TimeoutException {
+    private void deleteOperation(final String key) throws KeyNotFoundException, TimeoutException {
         log.info("Starting DEL operation");
-        final int tagID = receiveTagID(worker, serverTimeout);
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -346,17 +383,18 @@ public class DPwRClient {
         }
 
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-
-        if ("404".equals(statusCode)) {
-            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        switch (statusCode) {
+            case "221" -> log.info("Success");
+            case "421" ->
+                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
         log.info("Del completed");
     }
 
-    private byte[] containsOperation(final String key, final Endpoint endpoint) throws TimeoutException {
+    private byte[] containsOperation(final String key) throws TimeoutException {
         log.info("Starting CNT operation");
         byte[] result = new byte[0];
-        final int tagID = receiveTagID(worker, serverTimeout);
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -375,10 +413,9 @@ public class DPwRClient {
         return result;
     }
 
-    private byte[] hashOperation(final String key, final Endpoint endpoint) throws KeyNotFoundException, TimeoutException {
+    private byte[] hashOperation(final String key) throws KeyNotFoundException, TimeoutException {
         log.info("Starting HSH operation");
         final byte[] result;
-        final int tagID = receiveTagID(worker, serverTimeout);
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -396,6 +433,23 @@ public class DPwRClient {
         result = receiveHash(tagID, worker, serverTimeout);
         log.info("HSH completed");
         return result;
+    }
+
+    private void closeConnectionOperation() throws TimeoutException {
+        log.info("Starting BYE operation");
+        final ArrayList<Long> requests = new ArrayList<>();
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requests.add(prepareToSendString(tagID, "BYE", endpoint, scope));
+            //requests.add(endpoint.flush());
+            //requests.add(endpoint.closeNonBlocking());
+            awaitRequests(requests, worker, serverTimeout);
+        }
+        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
+        if (!statusCode.equals("BYE")) {
+            throw new TimeoutException("Wrong status code");
+        }
+        //endpoint.close();
+        log.info("BYE completed");
     }
 
     private List<byte[]> listOperation(final Endpoint endpoint) throws TimeoutException, ControlException {
