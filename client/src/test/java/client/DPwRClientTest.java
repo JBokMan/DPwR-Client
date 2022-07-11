@@ -40,10 +40,11 @@ public class DPwRClientTest {
     final Integer getAttempts = 5;
     DPwRClient client;
     Integer delAttempts = 5;
+    boolean verbose = true;
 
     @BeforeAll
     void setup() throws NetworkException {
-        client = new DPwRClient(serverAddress, timeoutMs, true);
+        client = new DPwRClient(serverAddress, timeoutMs, verbose);
     }
 
     private void canPutMultipleTimes(final int count, final int startIndex, final DPwRClient client) throws NetworkException, DuplicateKeyException {
@@ -504,19 +505,19 @@ public class DPwRClientTest {
         void testPutTimeout() {
             final String key = "timeout_test";
             final byte[] value = serialize("This is a value");
-            assertThrows(NetworkException.class, () -> client.put(key, value, 2));
+            assertThrows(NetworkException.class, () -> client.put(key, value, 1));
         }
 
         @Test
         void testGetTimeout() {
             final String key = "timeout_test";
-            assertThrows(NetworkException.class, () -> client.get(key, 2));
+            assertThrows(NetworkException.class, () -> client.get(key, 1));
         }
 
         @Test
         void testDeleteTimeout() {
             final String key = "timeout_test";
-            assertThrows(NetworkException.class, () -> client.del(key, 2));
+            assertThrows(NetworkException.class, () -> client.del(key, 1));
         }
     }
 
@@ -559,7 +560,7 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     assertDoesNotThrow(() -> testMultipleKeyValues(1000, client));
                     client.closeConnection(5);
@@ -570,7 +571,7 @@ public class DPwRClientTest {
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     assertDoesNotThrow(() -> testMultipleKeyValues(2000, client));
                     client.closeConnection(5);
@@ -593,7 +594,7 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     assertDoesNotThrow(() -> testMultipleKeyValues(3000, client));
                     client.closeConnection(5);
@@ -604,7 +605,7 @@ public class DPwRClientTest {
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     assertDoesNotThrow(() -> testMultipleKeyValues(4000, client));
                     client.closeConnection(5);
@@ -615,7 +616,7 @@ public class DPwRClientTest {
             });
             final Thread thread3 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     assertDoesNotThrow(() -> testMultipleKeyValues(5000, client));
                     client.closeConnection(5);
@@ -665,7 +666,7 @@ public class DPwRClientTest {
 
             final Thread thread1 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
                     client.closeConnection(5);
@@ -675,7 +676,7 @@ public class DPwRClientTest {
             });
             final Thread thread2 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
                     client.closeConnection(5);
@@ -685,7 +686,7 @@ public class DPwRClientTest {
             });
             final Thread thread3 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
                     client.closeConnection(5);
@@ -695,7 +696,7 @@ public class DPwRClientTest {
             });
             final Thread thread4 = new Thread(() -> {
                 try {
-                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, true);
+                    final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
                     client.closeConnection(5);
