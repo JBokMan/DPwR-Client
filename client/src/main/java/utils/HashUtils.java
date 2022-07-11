@@ -34,16 +34,17 @@ public class HashUtils {
         return id;
     }
 
-    private static String bytesToHex(final byte[] bytes) {
-        final StringBuilder sb = new StringBuilder();
-        for (final byte b : bytes) {
-            sb.append(String.format("%02x", b));
+    private static String bytesToHex(final byte[] raw) {
+        final StringBuilder buffer = new StringBuilder();
+        for (final byte b : raw) {
+            buffer.append(Character.forDigit((b >> 4) & 0xF, 16));
+            buffer.append(Character.forDigit((b & 0xF), 16));
         }
-        return sb.toString();
+        return buffer.toString();
     }
 
     public static int getResponsibleServerID(final String key, final int serverCount) {
-        if(serverCount <= 0) {
+        if (serverCount <= 0) {
             return -1;
         }
         final byte[] id = getMD5Hash(key);
