@@ -394,7 +394,7 @@ public class DPwRClient {
 
     private byte[] containsOperation(final String key) throws TimeoutException {
         log.info("Starting CNT operation");
-        byte[] result = new byte[0];
+        final byte[] result;
         final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -406,8 +406,10 @@ public class DPwRClient {
 
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
 
-        if ("200".equals(statusCode)) {
-            result = new byte[1];
+        switch (statusCode) {
+            case ("231") -> result = new byte[1];
+            case ("431") -> result = new byte[0];
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
         log.info("CNT completed");
         return result;
@@ -427,10 +429,22 @@ public class DPwRClient {
 
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
 
-        if ("404".equals(statusCode)) {
-            throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+        switch (statusCode) {
+            case ("241") -> log.info("Success");
+            case ("441") ->
+                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
+
         result = receiveHash(tagID, worker, serverTimeout);
+        final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
+
+        if ("242".equals(resultStatusCode)) {
+            log.info("Success");
+        } else {
+            throw new TimeoutException("Wrong status code: " + statusCode);
+        }
+
         log.info("HSH completed");
         return result;
     }
@@ -466,7 +480,7 @@ public class DPwRClient {
         final int count = receiveCount(tagID, worker, serverTimeout);
         for (int i = 0; i < count; i++) {
             result.add(receiveObjectPerRDMA(tagID, endpoint, worker, serverTimeout));
-            sendStatusCode(tagID, "200", endpoint, worker, serverTimeout);
+            sendStatusCode(tagID, "251", endpoint, worker, serverTimeout);
         }
 
         log.info("LST completed");
