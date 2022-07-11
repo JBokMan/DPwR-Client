@@ -454,15 +454,12 @@ public class DPwRClient {
         final ArrayList<Long> requests = new ArrayList<>();
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requests.add(prepareToSendString(tagID, "BYE", endpoint, scope));
-            //requests.add(endpoint.flush());
-            //requests.add(endpoint.closeNonBlocking());
             awaitRequests(requests, worker, serverTimeout);
         }
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
         if (!statusCode.equals("BYE")) {
             throw new TimeoutException("Wrong status code");
         }
-        //endpoint.close();
         log.info("BYE completed");
     }
 
