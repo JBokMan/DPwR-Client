@@ -216,6 +216,7 @@ public class CommunicationUtils {
             awaitRequests(requests, worker, timeoutMs);
         } catch (final TimeoutException e) {
             log.warn(e.getMessage());
+            endpoint.close();
         }
     }
 }
