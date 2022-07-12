@@ -40,7 +40,7 @@ public class DPwRClientTest {
     final Integer getAttempts = 5;
     DPwRClient client;
     Integer delAttempts = 5;
-    boolean verbose = true;
+    boolean verbose = false;
 
     @BeforeAll
     void setup() throws NetworkException {
@@ -199,10 +199,11 @@ public class DPwRClientTest {
         void testSuccessfulHash() {
             final String key = "This is a key";
             final byte[] value = serialize("This is a value");
-            final byte[] expected = HexFormat.of().parseHex("64fa7530c9b20949");
+            final byte[] expected = HexFormat.of().parseHex("718c1e1f3e5d824a");
             assertDoesNotThrow(() -> client.put(key, value, putAttempts));
             assertDoesNotThrow(() -> {
                 final byte[] response = client.hash(key, getAttempts);
+                System.out.println(response);
                 assertArrayEquals(expected, response);
             });
         }
