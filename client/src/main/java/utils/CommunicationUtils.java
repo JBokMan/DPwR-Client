@@ -17,9 +17,6 @@ import org.apache.commons.lang3.SerializationException;
 
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import static de.hhu.bsinfo.infinileap.util.Requests.State.COMPLETE;
@@ -51,19 +48,16 @@ public class CommunicationUtils {
         return prepareToSendData(tagID, byteBuffer.array(), endpoint, scope);
     }
 
-    public static ArrayList<Long> prepareToSendKey(final int tagID, final String key, final Endpoint endpoint, final ResourceScope scope) {
-        final ArrayList<Long> requests = new ArrayList<>();
+    public static long[] prepareToSendKey(final int tagID, final String key, final Endpoint endpoint, final ResourceScope scope) {
+        final long[] requests = new long[2];
         final byte[] keyBytes = serialize(key);
-        requests.add(prepareToSendInteger(tagID, keyBytes.length, endpoint, scope));
-        requests.add(prepareToSendData(tagID, keyBytes, endpoint, scope));
+        requests[0] = prepareToSendInteger(tagID, keyBytes.length, endpoint, scope);
+        requests[1] = prepareToSendData(tagID, keyBytes, endpoint, scope);
         return requests;
     }
 
     private static void awaitRequest(final long request, final Worker worker, final int timeoutMs) throws TimeoutException, InterruptedException {
-        if (log.isInfoEnabled()) {
-            log.info("Await request");
-        }
-        final long timeout = 1_000L * timeoutMs;
+        final long timeout = 2_000L * timeoutMs;
         int counter = 0;
         Requests.State requestState = state(request);
         while ((requestState != COMPLETE) && (requestState != ERROR) && (counter < timeout)) {
@@ -79,28 +73,30 @@ public class CommunicationUtils {
         }
     }
 
-    public static void awaitRequests(final List<Long> requests, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static void awaitRequests(final long[] requests, final Worker worker, final int timeoutMs) throws TimeoutException {
         boolean timeoutHappened = false;
-        for (final Long request : requests) {
+        for (int i = 0; i < requests.length; i++) {
             if (timeoutHappened) {
-                worker.cancelRequest(request);
+                worker.cancelRequest(requests[i]);
                 continue;
             }
             try {
-                awaitRequest(request, worker, timeoutMs);
+                awaitRequest(requests[i], worker, timeoutMs);
             } catch (final TimeoutException | InterruptedException e) {
                 timeoutHappened = true;
+                worker.cancelRequest(requests[i]);
             }
         }
         if (timeoutHappened) {
-            throw new TimeoutException("A timeout occurred while awaiting a request");
+            log.error("A timeout occurred while sending data");
+            throw new TimeoutException("A timeout occurred while sending data");
         }
     }
 
     public static void sendStatusCode(final int tagID, final String statusCode, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final Long request = prepareToSendString(tagID, statusCode, endpoint, scope);
-            awaitRequests(List.of(request), worker, timeoutMs);
+            final long request = prepareToSendString(tagID, statusCode, endpoint, scope);
+            awaitRequests(new long[]{request}, worker, timeoutMs);
         }
     }
 
@@ -117,7 +113,7 @@ public class CommunicationUtils {
             final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
             try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
                 final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
-                awaitRequests(List.of(request), worker, timeoutMs);
+                awaitRequests(new long[]{request}, worker, timeoutMs);
             }
         }
     }
@@ -127,7 +123,7 @@ public class CommunicationUtils {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final MemorySegment buffer = MemorySegment.allocateNative(size, scope);
             final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
-            awaitRequests(List.of(request), worker, timeoutMs);
+            awaitRequests(new long[]{request}, worker, timeoutMs);
             return buffer.toArray(ValueLayout.JAVA_BYTE);
         }
     }
@@ -170,7 +166,7 @@ public class CommunicationUtils {
         log.info("Receiving Memory Descriptor");
         final MemoryDescriptor descriptor = new MemoryDescriptor(scope);
         final long request = worker.receiveTagged(descriptor, Tag.of(tagID), new RequestParameters(scope));
-        awaitRequests(List.of(request), worker, timeoutMs);
+        awaitRequests(new long[]{request}, worker, timeoutMs);
         return descriptor;
     }
 
@@ -186,7 +182,7 @@ public class CommunicationUtils {
         final MemorySegment targetBuffer = MemorySegment.allocateNative(descriptor.remoteSize(), scope);
         try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
             final long request = endpoint.get(targetBuffer, descriptor.remoteAddress(), remoteKey, new RequestParameters(scope));
-            awaitRequests(List.of(request), worker, timeoutMs);
+            awaitRequests(new long[]{request}, worker, timeoutMs);
         }
         return targetBuffer;
     }
@@ -216,13 +212,12 @@ public class CommunicationUtils {
 
     public static void tearDownEndpoint(final Endpoint endpoint, final Worker worker, final int timeoutMs) {
         try {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(endpoint.flush());
-            requests.add(endpoint.closeNonBlocking());
+            final long[] requests = new long[2];
+            requests[0] = endpoint.flush();
+            requests[1] = endpoint.closeNonBlocking();
             awaitRequests(requests, worker, timeoutMs);
         } catch (final TimeoutException e) {
             log.warn(e.getMessage());
-            endpoint.close();
         }
     }
 }

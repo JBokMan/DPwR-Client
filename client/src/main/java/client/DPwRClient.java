@@ -311,10 +311,12 @@ public class DPwRClient {
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendString(tagID, "PUT", endpoint, scope));
-            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
-            requests.add(prepareToSendInteger(tagID, entryBytes.length, endpoint, scope));
+            final long[] requests = new long[4];
+            requests[0] = prepareToSendString(tagID, "PUT", endpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[1] = requests_tmp[0];
+            requests[2] = requests_tmp[1];
+            requests[3] = prepareToSendInteger(tagID, entryBytes.length, endpoint, scope);
 
             awaitRequests(requests, worker, serverTimeout);
         }
@@ -341,9 +343,11 @@ public class DPwRClient {
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final ArrayList<Long> requests = new ArrayList<>();
-            requests.add(prepareToSendString(tagID, "GET", endpoint, scope));
-            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+            final long[] requests = new long[3];
+            requests[0] = prepareToSendString(tagID, "GET", endpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[1] = requests_tmp[0];
+            requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
         }
@@ -373,11 +377,13 @@ public class DPwRClient {
 
     private void deleteOperation(final String key) throws KeyNotFoundException, TimeoutException {
         log.info("Starting DEL operation");
-        final ArrayList<Long> requests = new ArrayList<>();
+        final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendString(tagID, "DEL", endpoint, scope));
-            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+            requests[0] = prepareToSendString(tagID, "DEL", endpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[1] = requests_tmp[0];
+            requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
         }
@@ -395,11 +401,13 @@ public class DPwRClient {
     private byte[] containsOperation(final String key) throws TimeoutException {
         log.info("Starting CNT operation");
         final byte[] result;
-        final ArrayList<Long> requests = new ArrayList<>();
+        final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendString(tagID, "CNT", endpoint, scope));
-            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+            requests[0] = prepareToSendString(tagID, "CNT", endpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[1] = requests_tmp[0];
+            requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
         }
@@ -418,11 +426,13 @@ public class DPwRClient {
     private byte[] hashOperation(final String key) throws KeyNotFoundException, TimeoutException {
         log.info("Starting HSH operation");
         final byte[] result;
-        final ArrayList<Long> requests = new ArrayList<>();
+        final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendString(tagID, "HSH", endpoint, scope));
-            requests.addAll(prepareToSendKey(tagID, key, endpoint, scope));
+            requests[0] = prepareToSendString(tagID, "HSH", endpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[1] = requests_tmp[0];
+            requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
         }
@@ -451,10 +461,9 @@ public class DPwRClient {
 
     private void closeConnectionOperation() throws TimeoutException {
         log.info("Starting BYE operation");
-        final ArrayList<Long> requests = new ArrayList<>();
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendString(tagID, "BYE", endpoint, scope));
-            awaitRequests(requests, worker, serverTimeout);
+            final long request = prepareToSendString(tagID, "BYE", endpoint, scope);
+            awaitRequests(new long[]{request}, worker, serverTimeout);
         }
         final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
         if (!statusCode.equals("BYE")) {
@@ -466,11 +475,10 @@ public class DPwRClient {
     private List<byte[]> listOperation(final Endpoint endpoint) throws TimeoutException, ControlException {
         log.info("Starting LST operation");
         final int tagID = receiveTagID(worker, serverTimeout);
-        final ArrayList<Long> requests = new ArrayList<>();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests.add(prepareToSendString(tagID, "LST", endpoint, scope));
-            awaitRequests(requests, worker, serverTimeout);
+            final long request = prepareToSendString(tagID, "LST", endpoint, scope);
+            awaitRequests(new long[]{request}, worker, serverTimeout);
         }
 
         final ArrayList<byte[]> result = new ArrayList<>();
