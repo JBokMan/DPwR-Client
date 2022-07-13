@@ -37,7 +37,7 @@ import static org.apache.logging.log4j.Level.OFF;
 import static utils.CommunicationUtils.awaitRequests;
 import static utils.CommunicationUtils.prepareToSendInteger;
 import static utils.CommunicationUtils.prepareToSendKey;
-import static utils.CommunicationUtils.prepareToSendString;
+import static utils.CommunicationUtils.prepareToSendStatusString;
 import static utils.CommunicationUtils.receiveAddress;
 import static utils.CommunicationUtils.receiveCount;
 import static utils.CommunicationUtils.receiveHash;
@@ -312,65 +312,65 @@ public class DPwRClient {
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final long[] requests = new long[4];
-            requests[0] = prepareToSendString(tagID, "PUT", endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "PUT", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
             requests[3] = prepareToSendInteger(tagID, entryBytes.length, endpoint, scope);
 
             awaitRequests(requests, worker, serverTimeout);
-        }
 
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
 
-        switch (statusCode) {
-            case "200" -> {
-                sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout);
-                sendStatusCode(tagID, "201", endpoint, worker, serverTimeout);
-                final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
-                switch (resultStatusCode) {
-                    case "202" -> log.info("Success");
-                    case "401", "402" -> throw new TimeoutException("Something went wrong");
-                    default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            switch (statusCode) {
+                case "200" -> {
+                    sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout);
+                    sendStatusCode(tagID, "201", endpoint, worker, serverTimeout);
+                    final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+                    switch (resultStatusCode) {
+                        case "202" -> log.info("Success");
+                        case "401", "402" -> throw new TimeoutException("Something went wrong");
+                        default -> throw new TimeoutException("Wrong status code: " + statusCode);
+                    }
                 }
+                case "400" ->
+                        throw new DuplicateKeyException("An object with that key was already in the plasma store");
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
             }
-            case "400" -> throw new DuplicateKeyException("An object with that key was already in the plasma store");
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
         }
         log.info("Put completed");
     }
 
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
         log.info("Starting GET operation");
+        byte[] value;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final long[] requests = new long[3];
-            requests[0] = prepareToSendString(tagID, "GET", endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "GET", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
-        }
 
-        final byte[] value;
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-        switch (statusCode) {
-            case "211" -> {
-                value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
-                sendStatusCode(tagID, "212", endpoint, worker, serverTimeout);
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+            switch (statusCode) {
+                case "211" -> {
+                    value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
+                    sendStatusCode(tagID, "212", endpoint, worker, serverTimeout);
+                }
+                case "411" ->
+                        throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
             }
-            case "411" ->
-                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
-        }
 
-        final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
-        switch (resultStatusCode) {
-            case "213" -> log.info("Success");
-            case "412" -> throw new TimeoutException("Something went wrong");
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+            switch (resultStatusCode) {
+                case "213" -> log.info("Success");
+                case "412" -> throw new TimeoutException("Something went wrong");
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            }
         }
-
         log.info("Get completed");
         return value;
     }
@@ -380,20 +380,20 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests[0] = prepareToSendString(tagID, "DEL", endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "DEL", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
-        }
 
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-        switch (statusCode) {
-            case "221" -> log.info("Success");
-            case "421" ->
-                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+            switch (statusCode) {
+                case "221" -> log.info("Success");
+                case "421" ->
+                        throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            }
         }
         log.info("Del completed");
     }
@@ -404,20 +404,20 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests[0] = prepareToSendString(tagID, "CNT", endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "CNT", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
-        }
 
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
 
-        switch (statusCode) {
-            case ("231") -> result = new byte[1];
-            case ("431") -> result = new byte[0];
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            switch (statusCode) {
+                case ("231") -> result = new byte[1];
+                case ("431") -> result = new byte[0];
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            }
         }
         log.info("CNT completed");
         return result;
@@ -429,32 +429,31 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requests[0] = prepareToSendString(tagID, "HSH", endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "HSH", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
             awaitRequests(requests, worker, serverTimeout);
+
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+
+            switch (statusCode) {
+                case ("241") -> log.info("Success");
+                case ("441") ->
+                        throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
+                default -> throw new TimeoutException("Wrong status code: " + statusCode);
+            }
+
+            result = receiveHash(tagID, worker, serverTimeout);
+            final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+
+            if ("242".equals(resultStatusCode)) {
+                log.info("Success");
+            } else {
+                throw new TimeoutException("Wrong status code: " + statusCode);
+            }
         }
-
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-
-        switch (statusCode) {
-            case ("241") -> log.info("Success");
-            case ("441") ->
-                    throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
-            default -> throw new TimeoutException("Wrong status code: " + statusCode);
-        }
-
-        result = receiveHash(tagID, worker, serverTimeout);
-        final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout);
-
-        if ("242".equals(resultStatusCode)) {
-            log.info("Success");
-        } else {
-            throw new TimeoutException("Wrong status code: " + statusCode);
-        }
-
         log.info("HSH completed");
         return result;
     }
@@ -462,12 +461,12 @@ public class DPwRClient {
     private void closeConnectionOperation() throws TimeoutException {
         log.info("Starting BYE operation");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final long request = prepareToSendString(tagID, "BYE", endpoint, scope);
+            final long request = prepareToSendStatusString(tagID, "BYE", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
-        }
-        final String statusCode = receiveStatusCode(tagID, worker, serverTimeout);
-        if (!statusCode.equals("BYE")) {
-            throw new TimeoutException("Wrong status code");
+            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
+            if (!statusCode.equals("BYE")) {
+                throw new TimeoutException("Wrong status code");
+            }
         }
         log.info("BYE completed");
     }
@@ -477,7 +476,7 @@ public class DPwRClient {
         final int tagID = receiveTagID(worker, serverTimeout);
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final long request = prepareToSendString(tagID, "LST", endpoint, scope);
+            final long request = prepareToSendStatusString(tagID, "LST", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
         }
 
