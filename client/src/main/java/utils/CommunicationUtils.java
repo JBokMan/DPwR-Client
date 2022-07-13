@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -93,11 +94,9 @@ public class CommunicationUtils {
         }
     }
 
-    public static void sendStatusCode(final int tagID, final String statusCode, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws TimeoutException {
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final long request = prepareToSendStatusString(tagID, statusCode, endpoint, scope);
-            awaitRequests(new long[]{request}, worker, timeoutMs);
-        }
+    public static void sendStatusCode(final int tagID, final String statusCode, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        final long request = prepareToSendStatusString(tagID, statusCode, endpoint, scope);
+        awaitRequests(new long[]{request}, worker, timeoutMs);
     }
 
     private static MemorySegment memorySegmentOfBytes(final byte[] entryBytes, final ResourceScope scope) {
@@ -106,15 +105,13 @@ public class CommunicationUtils {
         return sourceBuffer;
     }
 
-    public static void sendEntryPerRDMA(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs) throws TimeoutException, ControlException {
+    public static void sendEntryPerRDMA(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs, final ResourceScope scope) throws TimeoutException, ControlException {
         log.info("Send Entry per RDMA");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
-            final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
-            try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
-                final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
-                awaitRequests(new long[]{request}, worker, timeoutMs);
-            }
+        final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
+        final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
+        try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
+            final long request = endpoint.put(sourceBuffer, descriptor.remoteAddress(), remoteKey);
+            awaitRequests(new long[]{request}, worker, timeoutMs);
         }
     }
 
@@ -125,46 +122,40 @@ public class CommunicationUtils {
         return buffer.asByteBuffer();
     }
 
-    private static int receiveInteger(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+    private static int receiveInteger(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
         final int number;
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final ByteBuffer integerByteBuffer = receiveData(tagID, Integer.BYTES, worker, timeoutMs, scope);
-            number = integerByteBuffer.getInt();
-            log.info("Received \"{}\"", number);
-        }
+        final ByteBuffer integerByteBuffer = receiveData(tagID, Integer.BYTES, worker, timeoutMs, scope);
+        number = integerByteBuffer.getInt();
+        log.info("Received \"{}\"", number);
         return number;
     }
 
-    public static int receiveTagID(final Worker worker, final int timeoutMs) throws TimeoutException {
-        return receiveInteger(0, worker, timeoutMs);
+    public static int receiveTagID(final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        return receiveInteger(0, worker, timeoutMs, scope);
     }
 
-    public static int receiveCount(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
-        return receiveInteger(tagID, worker, timeoutMs);
+    public static int receiveCount(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        return receiveInteger(tagID, worker, timeoutMs, scope);
     }
 
-    public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException, SerializationException {
+    public static InetSocketAddress receiveAddress(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException, SerializationException {
         final InetSocketAddress address;
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final int addressSize = receiveInteger(tagID, worker, timeoutMs);
-            final MemorySegment buffer = MemorySegment.allocateNative(addressSize, scope);
-            final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
-            awaitRequests(new long[]{request}, worker, timeoutMs);
-            address = deserialize(buffer.toArray(ValueLayout.JAVA_BYTE));
-        }
+        final int addressSize = receiveInteger(tagID, worker, timeoutMs, scope);
+        final MemorySegment buffer = MemorySegment.allocateNative(addressSize, scope);
+        final long request = worker.receiveTagged(buffer, Tag.of(tagID), new RequestParameters(scope));
+        awaitRequests(new long[]{request}, worker, timeoutMs);
+        address = deserialize(buffer.toArray(ValueLayout.JAVA_BYTE));
         return address;
     }
 
-    public static byte[] receiveHash(final int tagID, final Worker worker, final int timeoutMs) throws TimeoutException {
+    public static byte[] receiveHash(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
         final byte[] hash;
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final int hashSize = receiveInteger(tagID, worker, timeoutMs);
-            // Get key as bytes
-            hash = new byte[hashSize];
-            final ByteBuffer hashBuffer = receiveData(tagID, hashSize, worker, timeoutMs, scope);
-            for (int i = 0; i < hashSize; i++) {
-                hash[i] = hashBuffer.get();
-            }
+        final int hashSize = receiveInteger(tagID, worker, timeoutMs, scope);
+        // Get key as bytes
+        hash = new byte[hashSize];
+        final ByteBuffer hashBuffer = receiveData(tagID, hashSize, worker, timeoutMs, scope);
+        for (int i = 0; i < hashSize; i++) {
+            hash[i] = hashBuffer.get();
         }
         return hash;
     }
@@ -184,10 +175,10 @@ public class CommunicationUtils {
         return descriptor;
     }
 
-    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) throws SerializationException {
+    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) throws SerializationException, IOException, ClassNotFoundException {
         final byte[] data = new byte[objectBuffer.remaining()];
         objectBuffer.get(data);
-        return deserialize(data);
+        return PlasmaUtils.deserializePlasmaEntry(data);
     }
 
     private static MemorySegment prepareBufferAndGetBytes(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException, ControlException {
@@ -202,26 +193,21 @@ public class CommunicationUtils {
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
-    public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
+    public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws ControlException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
         log.info("Receiving Remote Key");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
+        final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
 
-            final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
-            final PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
-            log.info("Read \"{}\" from remote buffer", entry);
+        final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
+        final PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
+        log.info("Read \"{}\" from remote buffer", entry);
 
-            return entry.value;
-        }
+        return entry.value;
     }
 
-    public static byte[] receiveObjectPerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs) throws ControlException, TimeoutException, SerializationException {
+    public static byte[] receiveObjectPerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
-
-            return targetBuffer.toArray(ValueLayout.JAVA_BYTE);
-        }
+        final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
+        return targetBuffer.toArray(ValueLayout.JAVA_BYTE);
     }
 
     public static void tearDownEndpoint(final Endpoint endpoint, final Worker worker, final int timeoutMs) {

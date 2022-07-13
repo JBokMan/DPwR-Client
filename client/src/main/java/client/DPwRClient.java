@@ -23,6 +23,7 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import utils.DPwRErrorHandler;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -124,9 +125,9 @@ public class DPwRClient {
         log.info("Creating Endpoint");
         final EndpointParameters endpointParameters = new EndpointParameters().setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler);
 
-        try {
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             this.endpoint = this.worker.createEndpoint(endpointParameters);
-            this.tagID = receiveTagID(worker, serverTimeout);
+            this.tagID = receiveTagID(worker, serverTimeout, scope);
         } catch (final ControlException | TimeoutException e) {
             log.error(e.getMessage());
             if (attempts > 0) {
@@ -163,11 +164,13 @@ public class DPwRClient {
 
     private void infOperation() throws TimeoutException {
         log.info("Starting INF operation");
-        sendStatusCode(tagID, "INF", endpoint, worker, serverTimeout);
-        final int serverCount = receiveCount(tagID, worker, serverTimeout);
-        for (int i = 0; i < serverCount; i++) {
-            final InetSocketAddress serverAddress = receiveAddress(tagID, worker, serverTimeout);
-            this.serverMap.put(i, serverAddress);
+        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            sendStatusCode(tagID, "INF", endpoint, worker, serverTimeout, scope);
+            final int serverCount = receiveCount(tagID, worker, serverTimeout, scope);
+            for (int i = 0; i < serverCount; i++) {
+                final InetSocketAddress serverAddress = receiveAddress(tagID, worker, serverTimeout, scope);
+                this.serverMap.put(i, serverAddress);
+            }
         }
         log.info(this.serverMap.entrySet().toString());
         log.info("INF completed");
@@ -256,12 +259,12 @@ public class DPwRClient {
                 case "HSH" -> result = hashOperation(key);
                 case "BYE" -> closeConnectionOperation();
             }
-        } catch (final TimeoutException | SerializationException e) {
+        } catch (final TimeoutException | SerializationException | IOException | ClassNotFoundException e) {
             log.warn(e.getMessage());
             if (maxAttempts > 1) {
                 retry = true;
             } else {
-                throw e;
+                throw new TimeoutException(e.getMessage());
             }
         }
         if (retry) {
@@ -324,8 +327,8 @@ public class DPwRClient {
 
             switch (statusCode) {
                 case "200" -> {
-                    sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout);
-                    sendStatusCode(tagID, "201", endpoint, worker, serverTimeout);
+                    sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout, scope);
+                    sendStatusCode(tagID, "201", endpoint, worker, serverTimeout, scope);
                     final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
                     switch (resultStatusCode) {
                         case "202" -> log.info("Success");
@@ -341,9 +344,9 @@ public class DPwRClient {
         log.info("Put completed");
     }
 
-    private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
+    private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
         log.info("Starting GET operation");
-        byte[] value;
+        final byte[] value;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final long[] requests = new long[3];
             requests[0] = prepareToSendStatusString(tagID, "GET", endpoint, scope);
@@ -356,8 +359,8 @@ public class DPwRClient {
             final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
             switch (statusCode) {
                 case "211" -> {
-                    value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout);
-                    sendStatusCode(tagID, "212", endpoint, worker, serverTimeout);
+                    value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout, scope);
+                    sendStatusCode(tagID, "212", endpoint, worker, serverTimeout, scope);
                 }
                 case "411" ->
                         throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
@@ -445,7 +448,7 @@ public class DPwRClient {
                 default -> throw new TimeoutException("Wrong status code: " + statusCode);
             }
 
-            result = receiveHash(tagID, worker, serverTimeout);
+            result = receiveHash(tagID, worker, serverTimeout, scope);
             final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
 
             if ("242".equals(resultStatusCode)) {
@@ -473,20 +476,20 @@ public class DPwRClient {
 
     private List<byte[]> listOperation(final Endpoint endpoint) throws TimeoutException, ControlException {
         log.info("Starting LST operation");
-        final int tagID = receiveTagID(worker, serverTimeout);
-
+        final ArrayList<byte[]> result;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            final int tagID = receiveTagID(worker, serverTimeout, scope);
+
             final long request = prepareToSendStatusString(tagID, "LST", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
-        }
 
-        final ArrayList<byte[]> result = new ArrayList<>();
-        final int count = receiveCount(tagID, worker, serverTimeout);
-        for (int i = 0; i < count; i++) {
-            result.add(receiveObjectPerRDMA(tagID, endpoint, worker, serverTimeout));
-            sendStatusCode(tagID, "251", endpoint, worker, serverTimeout);
+            result = new ArrayList<>();
+            final int count = receiveCount(tagID, worker, serverTimeout, scope);
+            for (int i = 0; i < count; i++) {
+                result.add(receiveObjectPerRDMA(tagID, endpoint, worker, serverTimeout, scope));
+                sendStatusCode(tagID, "251", endpoint, worker, serverTimeout, scope);
+            }
         }
-
         log.info("LST completed");
         return result;
     }
