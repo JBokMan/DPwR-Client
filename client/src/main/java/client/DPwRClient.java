@@ -87,6 +87,10 @@ public class DPwRClient {
     }
 
     public void initialize() throws NetworkException {
+        initialize(99);
+    }
+
+    public void initialize(final int maxAttempts) throws NetworkException {
         if (ObjectUtils.isEmpty(this.serverAddress) || ObjectUtils.isEmpty(this.serverAddress) || ObjectUtils.isEmpty(this.serverAddress)) {
             throw new IllegalStateException("Client is not properly set up, either the server address, server timeout or verbose state is missing");
         }
@@ -117,7 +121,7 @@ public class DPwRClient {
         } catch (final ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
         }
-        getNetworkInformation(5);
+        getNetworkInformation(maxAttempts);
     }
 
     private void establishConnection(final int attempts) throws ControlException, TimeoutException {
@@ -158,7 +162,7 @@ public class DPwRClient {
             }
         }
         if (retry) {
-            getNetworkInformation(maxAttempts - 1);
+            initialize(maxAttempts - 1);
         }
     }
 
@@ -205,13 +209,11 @@ public class DPwRClient {
         }
     }
 
-    public void closeConnection() throws NetworkException {
+    public void closeConnection() {
         try {
             processRequest("BYE", "", new byte[0], 1);
-        } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
-            throw new NetworkException(e.getMessage());
-        } catch (final KeyNotFoundException e) {
-            throw new RuntimeException(e);
+        } catch (final DuplicateKeyException | ControlException | TimeoutException | KeyNotFoundException e) {
+            log.warn(e.getMessage());
         }
     }
 
@@ -348,7 +350,7 @@ public class DPwRClient {
         log.info("[{}] Put completed", tagID);
     }
 
-    private void requestNewTagID(ResourceScope scope) throws TimeoutException {
+    private void requestNewTagID(final ResourceScope scope) throws TimeoutException {
         final long[] tagIDRequests = new long[1];
         tagIDRequests[0] = prepareToSendInteger(tagID, tagID, endpoint, scope);
         awaitRequests(tagIDRequests, worker, serverTimeout);
