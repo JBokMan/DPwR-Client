@@ -203,9 +203,9 @@ public class DPwRClient {
         }
     }
 
-    public void closeConnection(final int maxAttempts) throws NetworkException {
+    public void closeConnection() throws NetworkException {
         try {
-            processRequest("BYE", "", new byte[0], maxAttempts);
+            processRequest("BYE", "", new byte[0], 1);
         } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
         } catch (final KeyNotFoundException e) {
@@ -466,9 +466,11 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             final long request = prepareToSendStatusString(tagID, "BYE", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
-            final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
-            if (!statusCode.equals("BYE")) {
-                throw new TimeoutException("Wrong status code");
+            try {
+                final long request_2 = endpoint.closeNonBlocking();
+                awaitRequests(new long[]{request_2}, worker, serverTimeout);
+            } catch (final TimeoutException e) {
+                endpoint.close();
             }
         }
         log.info("BYE completed");
