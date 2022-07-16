@@ -30,7 +30,7 @@ import static org.apache.commons.lang3.SerializationUtils.deserialize;
 public class CommunicationUtils {
 
     private static Long prepareToSendData(final int tagID, final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
-        log.info("Prepare to send data");
+        log.info("[{}] Prepare to send data", tagID);
         final int dataSize = data.length;
 
         final MemorySegment source = MemorySegment.ofArray(data);
@@ -106,7 +106,7 @@ public class CommunicationUtils {
     }
 
     public static void sendEntryPerRDMA(final int tagID, final byte[] entryBytes, final Worker worker, final Endpoint endpoint, final int timeoutMs, final ResourceScope scope) throws TimeoutException, ControlException {
-        log.info("Send Entry per RDMA");
+        log.info("[{}] Send Entry per RDMA", tagID);
         final MemoryDescriptor descriptor = receiveMemoryDescriptor(tagID, worker, timeoutMs, scope);
         final MemorySegment sourceBuffer = memorySegmentOfBytes(entryBytes, scope);
         try (final RemoteKey remoteKey = endpoint.unpack(descriptor)) {
@@ -132,6 +132,10 @@ public class CommunicationUtils {
 
     public static int receiveTagID(final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
         return receiveInteger(0, worker, timeoutMs, scope);
+    }
+
+    public static int receiveTagID(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        return receiveInteger(tagID, worker, timeoutMs, scope);
     }
 
     public static int receiveCount(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
@@ -164,7 +168,7 @@ public class CommunicationUtils {
         final String statusCode;
         final ByteBuffer statusCodeByteBuffer = receiveData(tagID, 6, worker, timeoutMs, scope);
         statusCode = String.valueOf(statusCodeByteBuffer.getChar()) + statusCodeByteBuffer.getChar() + statusCodeByteBuffer.getChar();
-        log.info("Received status code: \"{}\"", statusCode);
+        log.info("[{}] Received status code: \"{}\"", tagID, statusCode);
         return statusCode;
     }
 

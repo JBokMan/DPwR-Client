@@ -22,6 +22,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import utils.DPwRErrorHandler;
+import utils.PlasmaUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -32,7 +33,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
-import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.apache.logging.log4j.Level.INFO;
 import static org.apache.logging.log4j.Level.OFF;
 import static utils.CommunicationUtils.awaitRequests;
@@ -165,6 +165,8 @@ public class DPwRClient {
     private void infOperation() throws TimeoutException {
         log.info("Starting INF operation");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             sendStatusCode(tagID, "INF", endpoint, worker, serverTimeout, scope);
             final int serverCount = receiveCount(tagID, worker, serverTimeout, scope);
             for (int i = 0; i < serverCount; i++) {
@@ -309,11 +311,13 @@ public class DPwRClient {
         return result;
     }
 
-    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
-        log.info("Starting PUT operation");
-        final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
+    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException, IOException {
+        log.info("[{}] Starting PUT operation", tagID);
+        final byte[] entryBytes = PlasmaUtils.serializePlasmaEntry(new PlasmaEntry(key, value, new byte[20]));
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             final long[] requests = new long[4];
             requests[0] = prepareToSendStatusString(tagID, "PUT", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
@@ -341,13 +345,22 @@ public class DPwRClient {
                 default -> throw new TimeoutException("Wrong status code: " + statusCode);
             }
         }
-        log.info("Put completed");
+        log.info("[{}] Put completed", tagID);
+    }
+
+    private void requestNewTagID(ResourceScope scope) throws TimeoutException {
+        final long[] tagIDRequests = new long[1];
+        tagIDRequests[0] = prepareToSendInteger(tagID, tagID, endpoint, scope);
+        awaitRequests(tagIDRequests, worker, serverTimeout);
+        this.tagID = receiveTagID(worker, serverTimeout, scope);
     }
 
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
         log.info("Starting GET operation");
         final byte[] value;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             final long[] requests = new long[3];
             requests[0] = prepareToSendStatusString(tagID, "GET", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
@@ -383,6 +396,8 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             requests[0] = prepareToSendStatusString(tagID, "DEL", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
@@ -407,6 +422,8 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             requests[0] = prepareToSendStatusString(tagID, "CNT", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
@@ -432,6 +449,8 @@ public class DPwRClient {
         final long[] requests = new long[3];
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             requests[0] = prepareToSendStatusString(tagID, "HSH", endpoint, scope);
             final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
             requests[1] = requests_tmp[0];
@@ -464,11 +483,13 @@ public class DPwRClient {
     private void closeConnectionOperation() throws TimeoutException {
         log.info("Starting BYE operation");
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             final long request = prepareToSendStatusString(tagID, "BYE", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
             try {
                 final long request_2 = endpoint.closeNonBlocking();
-                awaitRequests(new long[]{request_2}, worker, serverTimeout);
+                awaitRequests(new long[]{request_2}, worker, 1000);
             } catch (final TimeoutException e) {
                 endpoint.close();
             }
@@ -480,6 +501,8 @@ public class DPwRClient {
         log.info("Starting LST operation");
         final ArrayList<byte[]> result;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+            requestNewTagID(scope);
+
             final int tagID = receiveTagID(worker, serverTimeout, scope);
 
             final long request = prepareToSendStatusString(tagID, "LST", endpoint, scope);
