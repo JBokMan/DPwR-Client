@@ -53,6 +53,7 @@ import static utils.CommunicationUtils.receiveTagID;
 import static utils.CommunicationUtils.receiveValuePerRDMA;
 import static utils.CommunicationUtils.sendEntryPerRDMA;
 import static utils.CommunicationUtils.sendStatusCode;
+import static utils.CommunicationUtils.streamTagID;
 import static utils.CommunicationUtils.tearDownEndpoint;
 import static utils.HashUtils.getResponsibleServerID;
 
