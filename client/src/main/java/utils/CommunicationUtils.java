@@ -45,6 +45,7 @@ public class CommunicationUtils {
     }
 
     public static Long prepareToSendInteger(final int tagID, final int integer, final Endpoint endpoint, final ResourceScope scope) {
+        log.info("[{}] send number {}", tagID, integer);
         final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(integer);
         return prepareToSendData(tagID, byteBuffer.array(), endpoint, scope);
     }
@@ -95,6 +96,7 @@ public class CommunicationUtils {
     }
 
     public static void sendStatusCode(final int tagID, final String statusCode, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
+        log.info("[{}] send status code: {}", tagID, statusCode);
         final long request = prepareToSendStatusString(tagID, statusCode, endpoint, scope);
         awaitRequests(new long[]{request}, worker, timeoutMs);
     }
@@ -126,7 +128,7 @@ public class CommunicationUtils {
         final int number;
         final ByteBuffer integerByteBuffer = receiveData(tagID, Integer.BYTES, worker, timeoutMs, scope);
         number = integerByteBuffer.getInt();
-        log.info("Received \"{}\"", number);
+        log.info("[{}] Received \"{}\"", tagID, number);
         return number;
     }
 

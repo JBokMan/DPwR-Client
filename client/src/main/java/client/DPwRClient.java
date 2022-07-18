@@ -167,7 +167,7 @@ public class DPwRClient {
     }
 
     private void infOperation() throws TimeoutException {
-        log.info("Starting INF operation");
+        log.info("[{}] Starting INF operation", tagID);
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
@@ -179,7 +179,7 @@ public class DPwRClient {
             }
         }
         log.info(this.serverMap.entrySet().toString());
-        log.info("INF completed");
+        log.info("[{}] INF completed", tagID);
     }
 
     public void put(final String key, final byte[] value, final int maxAttempts) throws NetworkException, DuplicateKeyException {
