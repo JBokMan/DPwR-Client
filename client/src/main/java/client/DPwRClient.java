@@ -3,16 +3,21 @@ package client;
 import de.hhu.bsinfo.infinileap.binding.Context;
 import de.hhu.bsinfo.infinileap.binding.ContextParameters;
 import de.hhu.bsinfo.infinileap.binding.ControlException;
+import de.hhu.bsinfo.infinileap.binding.DataType;
 import de.hhu.bsinfo.infinileap.binding.Endpoint;
 import de.hhu.bsinfo.infinileap.binding.EndpointParameters;
 import de.hhu.bsinfo.infinileap.binding.ErrorHandler;
 import de.hhu.bsinfo.infinileap.binding.NativeLogger;
+import de.hhu.bsinfo.infinileap.binding.RequestParameters;
 import de.hhu.bsinfo.infinileap.binding.ThreadMode;
 import de.hhu.bsinfo.infinileap.binding.Worker;
 import de.hhu.bsinfo.infinileap.binding.WorkerParameters;
+import de.hhu.bsinfo.infinileap.primitive.NativeInteger;
+import de.hhu.bsinfo.infinileap.primitive.NativeLong;
 import exceptions.DuplicateKeyException;
 import exceptions.KeyNotFoundException;
 import exceptions.NetworkException;
+import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
@@ -53,7 +58,7 @@ import static utils.HashUtils.getResponsibleServerID;
 
 @Slf4j
 public class DPwRClient {
-    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA};
+    private static final ContextParameters.Feature[] FEATURE_SET = {ContextParameters.Feature.TAG, ContextParameters.Feature.RMA, ContextParameters.Feature.STREAM};
     private final Map<Integer, InetSocketAddress> serverMap = new HashMap<>();
     private final ErrorHandler errorHandler = new DPwRErrorHandler();
     private InetSocketAddress serverAddress = null;
@@ -127,11 +132,15 @@ public class DPwRClient {
     private void establishConnection(final int attempts) throws ControlException, TimeoutException {
         // Create an endpoint
         log.info("Creating Endpoint");
-        final EndpointParameters endpointParameters = new EndpointParameters().setRemoteAddress(serverAddress).setErrorHandler(this.errorHandler);
+        final EndpointParameters endpointParameters = new EndpointParameters()
+                .setRemoteAddress(serverAddress)
+                .setErrorHandler(this.errorHandler)
+                .enableClientIdentifier();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             this.endpoint = this.worker.createEndpoint(endpointParameters);
-            this.tagID = receiveTagID(worker, serverTimeout, scope);
+            this.tagID = receiveTagIDAsStream(scope);
+            //this.tagID = receiveTagID(worker, serverTimeout, scope);
         } catch (final ControlException | TimeoutException e) {
             log.error(e.getMessage());
             if (attempts > 0) {
@@ -140,6 +149,21 @@ public class DPwRClient {
                 throw e;
             }
         }
+    }
+
+    private int receiveTagIDAsStream(final ResourceScope scope) throws TimeoutException {
+        final var buffer = MemorySegment.allocateNative(Integer.BYTES, scope);
+        final var length = new NativeLong();
+
+        log.info("Receiving stream");
+        final var request = endpoint.receiveStream(buffer, 1, length, new RequestParameters()
+                .setDataType(DataType.CONTIGUOUS_32_BIT)
+                .setFlags(RequestParameters.Flag.STREAM_WAIT));
+
+        awaitRequests(new long[]{request}, worker, serverTimeout);
+
+        final var first = NativeInteger.map(buffer, 0L);
+        return first.get();
     }
 
     private void setLogLevel(final org.apache.logging.log4j.Level level) {
@@ -273,6 +297,12 @@ public class DPwRClient {
         }
         if (retry) {
             log.warn("Retry " + operationName);
+            try {
+                initialize();
+            } catch (final NetworkException e) {
+                log.error(e.getMessage());
+                return result;
+            }
             return processRequest(operationName, key, value, maxAttempts - 1);
         }
         return result;
@@ -351,10 +381,13 @@ public class DPwRClient {
     }
 
     private void requestNewTagID(final ResourceScope scope) throws TimeoutException {
-        final long[] tagIDRequests = new long[1];
-        tagIDRequests[0] = prepareToSendInteger(tagID, tagID, endpoint, scope);
-        awaitRequests(tagIDRequests, worker, serverTimeout);
-        this.tagID = receiveTagID(worker, serverTimeout, scope);
+        streamTagID(tagID, endpoint, worker, serverTimeout, scope);
+        final int newTagID = receiveTagIDAsStream(scope);
+        if (newTagID == 0) {
+            requestNewTagID(scope);
+        } else {
+            this.tagID = newTagID;
+        }
     }
 
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {

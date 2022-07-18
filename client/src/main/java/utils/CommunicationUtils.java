@@ -7,6 +7,7 @@ import de.hhu.bsinfo.infinileap.binding.RemoteKey;
 import de.hhu.bsinfo.infinileap.binding.RequestParameters;
 import de.hhu.bsinfo.infinileap.binding.Tag;
 import de.hhu.bsinfo.infinileap.binding.Worker;
+import de.hhu.bsinfo.infinileap.primitive.NativeInteger;
 import de.hhu.bsinfo.infinileap.util.Requests;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
@@ -19,6 +20,7 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.concurrent.TimeoutException;
 
 import static de.hhu.bsinfo.infinileap.util.Requests.State.COMPLETE;
@@ -33,8 +35,11 @@ public class CommunicationUtils {
         log.info("[{}] Prepare to send data", tagID);
         final int dataSize = data.length;
 
+        log.info(Arrays.toString(data));
         final MemorySegment source = MemorySegment.ofArray(data);
+        log.info(String.valueOf(source));
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
+        log.info(String.valueOf(buffer));
         buffer.copyFrom(source);
 
         return endpoint.sendTagged(buffer, Tag.of(tagID));
@@ -47,6 +52,7 @@ public class CommunicationUtils {
     public static Long prepareToSendInteger(final int tagID, final int integer, final Endpoint endpoint, final ResourceScope scope) {
         log.info("[{}] send number {}", tagID, integer);
         final ByteBuffer byteBuffer = ByteBuffer.allocate(Integer.BYTES).putInt(integer);
+        log.info(Arrays.toString(byteBuffer.array()));
         return prepareToSendData(tagID, byteBuffer.array(), endpoint, scope);
     }
 
@@ -225,5 +231,17 @@ public class CommunicationUtils {
         } catch (final TimeoutException e) {
             log.warn(e.getMessage());
         }
+    }
+
+    public static void streamTagID(final int tagID, final Endpoint endpoint, final Worker worker, final int timeout, final ResourceScope scope) throws TimeoutException {
+        // Allocate a buffer and write numbers into it
+        final var buffer = MemorySegment.allocateNative(Integer.BYTES, scope);
+        final var first = NativeInteger.map(buffer, 0L);
+        first.set(tagID);
+        // Send the buffer to the server
+        log.info("Sending first chunk of stream");
+        final var request = endpoint.sendStream(first, new RequestParameters()
+                .setDataType(first.dataType()));
+        awaitRequests(new long[]{request}, worker, timeout);
     }
 }
