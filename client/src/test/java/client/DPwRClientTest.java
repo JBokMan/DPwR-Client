@@ -35,12 +35,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class DPwRClientTest {
 
     final InetSocketAddress serverAddress = new InetSocketAddress("127.0.0.1", 2998);
-    final Integer timeoutMs = 500;
+    final Integer timeoutMs = 2000;
     final Integer putAttempts = 5;
     final Integer getAttempts = 5;
     DPwRClient client;
     Integer delAttempts = 5;
-    boolean verbose = false;
+    boolean verbose = true;
 
     @BeforeAll
     void setup() throws NetworkException {
@@ -122,11 +122,7 @@ public class DPwRClientTest {
                 System.err.println(e.getMessage());
             }
 
-            try {
-                client.closeConnection(5);
-            } catch (final NetworkException e) {
-                System.err.println(e.getMessage());
-            }
+            client.closeConnection();
         }
 
         @Test
@@ -563,8 +559,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(1000, client));
-                    client.closeConnection(5);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(1000, client, 5));
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -574,8 +570,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(2000, client));
-                    client.closeConnection(5);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(2000, client, 5));
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -597,8 +593,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(3000, client));
-                    client.closeConnection(5);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(3000, client, 10));
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -608,8 +604,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(4000, client));
-                    client.closeConnection(5);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(4000, client, 10));
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -619,8 +615,8 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(5000, client));
-                    client.closeConnection(5);
+                    assertDoesNotThrow(() -> testMultipleKeyValues(5000, client, 10));
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -634,10 +630,10 @@ public class DPwRClientTest {
             assertDoesNotThrow(() -> latch.await());
         }
 
-        private void testMultipleKeyValues(final int startIndex, final DPwRClient client) throws Exception {
-            canPutMultipleTimes(500, startIndex, client);
-            canGetMultipleTimes(500, startIndex, client);
-            canDeleteMultipleTimes(500, startIndex, client);
+        private void testMultipleKeyValues(final int startIndex, final DPwRClient client, final int count) throws Exception {
+            canPutMultipleTimes(count, startIndex, client);
+            canGetMultipleTimes(count, startIndex, client);
+            canDeleteMultipleTimes(count, startIndex, client);
         }
     }
 
@@ -670,7 +666,7 @@ public class DPwRClientTest {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
-                    client.closeConnection(5);
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -680,7 +676,7 @@ public class DPwRClientTest {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
-                    client.closeConnection(5);
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -690,7 +686,7 @@ public class DPwRClientTest {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
-                    client.closeConnection(5);
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -700,7 +696,7 @@ public class DPwRClientTest {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
                     stress(latch, client);
-                    client.closeConnection(5);
+                    client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -716,7 +712,7 @@ public class DPwRClientTest {
 
         private void stress(final CountDownLatch latch, final DPwRClient client) {
             final Random random = new Random();
-            for (int i = 0; i < 500; i++) {
+            for (int i = 0; i < 10; i++) {
                 final int index = random.ints(0, 50).findFirst().orElse(0);
                 final String key = "This is a key" + index;
                 final byte[] value = serialize("This is a value" + index);
