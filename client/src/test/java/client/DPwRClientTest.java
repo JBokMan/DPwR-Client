@@ -665,8 +665,9 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    stress(latch, client);
+                    stress(client);
                     client.closeConnection();
+                    latch.countDown();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -675,8 +676,9 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    stress(latch, client);
+                    stress(client);
                     client.closeConnection();
+                    latch.countDown();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -685,8 +687,9 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    stress(latch, client);
+                    stress(client);
                     client.closeConnection();
+                    latch.countDown();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -695,8 +698,9 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    stress(latch, client);
+                    stress(client);
                     client.closeConnection();
+                    latch.countDown();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
                 }
@@ -710,9 +714,9 @@ public class DPwRClientTest {
             assertDoesNotThrow(() -> latch.await());
         }
 
-        private void stress(final CountDownLatch latch, final DPwRClient client) {
+        private void stress(final DPwRClient client) {
             final Random random = new Random();
-            for (int i = 0; i < 10; i++) {
+            for (int i = 0; i < 500; i++) {
                 final int index = random.ints(0, 50).findFirst().orElse(0);
                 final String key = "This is a key" + index;
                 final byte[] value = serialize("This is a value" + index);
@@ -727,7 +731,6 @@ public class DPwRClientTest {
                     System.out.println(e.getMessage());
                 }
             }
-            latch.countDown();
         }
     }
 }
