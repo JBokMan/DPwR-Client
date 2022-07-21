@@ -187,7 +187,7 @@ public class DPwRClient {
             }
         }
         if (retry) {
-            initialize(maxAttempts - 1);
+            getNetworkInformation(maxAttempts - 1);
         }
     }
 
@@ -383,12 +383,7 @@ public class DPwRClient {
 
     private void requestNewTagID(final ResourceScope scope) throws TimeoutException {
         streamTagID(tagID, endpoint, worker, serverTimeout, scope);
-        final int newTagID = receiveTagIDAsStream(scope);
-        if (newTagID == 0) {
-            requestNewTagID(scope);
-        } else {
-            this.tagID = newTagID;
-        }
+        this.tagID = receiveTagIDAsStream(scope);
     }
 
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
