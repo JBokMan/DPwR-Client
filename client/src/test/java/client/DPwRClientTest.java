@@ -35,7 +35,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 public class DPwRClientTest {
 
     final InetSocketAddress serverAddress = new InetSocketAddress("127.0.0.1", 2998);
-    final Integer timeoutMs = 2000;
+    final Integer timeoutMs = 2500;
     final Integer putAttempts = 5;
     final Integer getAttempts = 5;
     DPwRClient client;
@@ -528,6 +528,11 @@ public class DPwRClientTest {
             client.initialize();
         }
 
+        @AfterEach
+        public void tearDown() {
+            client.closeConnection();
+        }
+
         @Test
         @Order(1)
         void testCanPutMultipleTimes() {
@@ -559,7 +564,7 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(1000, client, 5));
+                    assertDoesNotThrow(() -> testMultipleKeyValues(1000, client, 1000));
                     client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
@@ -570,7 +575,7 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(2000, client, 5));
+                    assertDoesNotThrow(() -> testMultipleKeyValues(2000, client, 1000));
                     client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
@@ -593,7 +598,7 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(3000, client, 10));
+                    assertDoesNotThrow(() -> testMultipleKeyValues(3000, client, 1000));
                     client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
@@ -604,7 +609,7 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(4000, client, 10));
+                    assertDoesNotThrow(() -> testMultipleKeyValues(4000, client, 1000));
                     client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
@@ -615,7 +620,7 @@ public class DPwRClientTest {
                 try {
                     final DPwRClient client = new DPwRClient(serverAddress, timeoutMs, verbose);
                     client.initialize();
-                    assertDoesNotThrow(() -> testMultipleKeyValues(5000, client, 10));
+                    assertDoesNotThrow(() -> testMultipleKeyValues(5000, client, 1000));
                     client.closeConnection();
                 } catch (final NetworkException e) {
                     throw new RuntimeException(e);
