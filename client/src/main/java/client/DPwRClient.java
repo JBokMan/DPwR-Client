@@ -54,7 +54,6 @@ import static utils.CommunicationUtils.receiveValuePerRDMA;
 import static utils.CommunicationUtils.sendEntryPerRDMA;
 import static utils.CommunicationUtils.sendStatusCode;
 import static utils.CommunicationUtils.streamTagID;
-import static utils.CommunicationUtils.tearDownEndpoint;
 import static utils.HashUtils.getResponsibleServerID;
 
 @Slf4j
@@ -67,7 +66,8 @@ public class DPwRClient {
     private Boolean verbose = null;
     private Context context;
     private Worker worker;
-    private Endpoint endpoint;
+    private Endpoint currentEndpoint;
+    private final Map<Integer, Endpoint> endpointMap = new HashMap<>();
     private int tagID;
 
     public DPwRClient() {
@@ -93,7 +93,7 @@ public class DPwRClient {
     }
 
     public void initialize() throws NetworkException {
-        initialize(99);
+        initialize(10);
     }
 
     public void initialize(final int maxAttempts) throws NetworkException {
@@ -123,14 +123,14 @@ public class DPwRClient {
         }
 
         try {
-            establishConnection(5);
+            this.currentEndpoint = establishConnection(this.serverAddress, 0, 5);
         } catch (final ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
         }
         getNetworkInformation(maxAttempts);
     }
 
-    private void establishConnection(final int attempts) throws ControlException, TimeoutException {
+    private Endpoint establishConnection(final InetSocketAddress serverAddress, final int serverID, final int attempts) throws ControlException, TimeoutException {
         // Create an endpoint
         log.info("Creating Endpoint");
         final EndpointParameters endpointParameters = new EndpointParameters()
@@ -139,17 +139,23 @@ public class DPwRClient {
                 .enableClientIdentifier();
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            this.endpoint = this.worker.createEndpoint(endpointParameters);
+            this.currentEndpoint = this.worker.createEndpoint(endpointParameters);
             this.tagID = receiveTagIDAsStream(scope);
-            //this.tagID = receiveTagID(worker, serverTimeout, scope);
+            this.endpointMap.put(serverID, this.currentEndpoint);
         } catch (final ControlException | TimeoutException e) {
             log.error(e.getMessage());
             if (attempts > 0) {
-                establishConnection(attempts - 1);
+                return establishConnection(serverAddress, serverID, attempts - 1);
             } else {
                 throw e;
             }
         }
+        return this.currentEndpoint;
+    }
+
+    private Endpoint establishConnection(final int serverID, final int attempts) throws ControlException, TimeoutException {
+        final InetSocketAddress serverAddress = this.serverMap.get(serverID);
+        return establishConnection(serverAddress, serverID, attempts);
     }
 
     private int receiveTagIDAsStream(final ResourceScope scope) throws TimeoutException {
@@ -157,7 +163,7 @@ public class DPwRClient {
         final var length = new NativeLong();
 
         log.info("Receiving stream");
-        final var request = endpoint.receiveStream(buffer, 1, length, new RequestParameters()
+        final var request = currentEndpoint.receiveStream(buffer, 1, length, new RequestParameters()
                 .setDataType(DataType.CONTIGUOUS_32_BIT)
                 .setFlags(RequestParameters.Flag.STREAM_WAIT));
 
@@ -196,11 +202,17 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
-            sendStatusCode(tagID, "INF", endpoint, worker, serverTimeout, scope);
+            sendStatusCode(tagID, "INF", currentEndpoint, worker, serverTimeout, scope);
             final int serverCount = receiveCount(tagID, worker, serverTimeout, scope);
+            this.serverMap.put(0, null);
             for (int i = 0; i < serverCount; i++) {
                 final InetSocketAddress serverAddress = receiveAddress(tagID, worker, serverTimeout, scope);
                 this.serverMap.put(i, serverAddress);
+                if (serverAddress.equals(this.serverAddress)) {
+                    this.endpointMap.put(i, this.currentEndpoint);
+                } else {
+                    this.endpointMap.put(i, null);
+                }
             }
         }
         log.info(this.serverMap.entrySet().toString());
@@ -231,6 +243,20 @@ public class DPwRClient {
             processRequest("DEL", key, new byte[0], maxAttempts);
         } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
+        }
+    }
+
+    public void closeConnection(final int serverID) {
+        this.currentEndpoint = this.endpointMap.get(serverID);
+        if (this.currentEndpoint == null) {
+            return;
+        }
+        try {
+            processRequest("BYE", "", new byte[0], 1);
+        } catch (final DuplicateKeyException | ControlException | TimeoutException | KeyNotFoundException e) {
+            log.warn(e.getMessage());
+        } finally {
+            this.endpointMap.put(serverID, null);
         }
     }
 
@@ -274,8 +300,9 @@ public class DPwRClient {
     }
 
     public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
-        final InetSocketAddress responsibleServer = this.serverMap.get(getResponsibleServerID(key, this.serverMap.size()));
-        log.info("Responsible server: {}", responsibleServer);
+        final int responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
+        this.currentEndpoint = getOrCreateEndpoint(responsibleServerID);
+
         // lookup in server endpoint map
         boolean retry = false;
         byte[] result = new byte[0];
@@ -298,38 +325,36 @@ public class DPwRClient {
         }
         if (retry) {
             log.warn("Retry " + operationName);
-            try {
-                initialize();
-            } catch (final NetworkException e) {
-                log.error(e.getMessage());
-                return result;
-            }
+            this.endpointMap.put(responsibleServerID, null);
             return processRequest(operationName, key, value, maxAttempts - 1);
         }
         return result;
     }
 
-    @SuppressWarnings("TryFinallyCanBeTryWithResources")
+    private Endpoint getOrCreateEndpoint(final int responsibleServerID) throws ControlException, TimeoutException {
+        Endpoint endpoint = this.endpointMap.get(responsibleServerID);
+        if (endpoint != null) {
+            return endpoint;
+        }
+        endpoint = establishConnection(responsibleServerID, 5);
+        return endpoint;
+    }
+
     public List<byte[]> processListRequest(int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException, NetworkException {
         final ArrayList<byte[]> result = new ArrayList<>();
-        for (final InetSocketAddress server : this.serverMap.values()) {
+        for (final int serverID : this.serverMap.keySet()) {
             boolean retry = true;
             while (retry && maxAttempts >= 1) {
                 retry = false;
-                final ResourceScope scope = ResourceScope.newConfinedScope();
-                final Endpoint endpoint = this.worker.createEndpoint(new EndpointParameters(scope).setRemoteAddress(server).setErrorHandler(errorHandler));
-
+                this.currentEndpoint = getOrCreateEndpoint(serverID);
                 try {
-                    result.addAll(listOperation(endpoint));
+                    result.addAll(listOperation(currentEndpoint));
                 } catch (final TimeoutException e) {
                     if (maxAttempts > 1) {
                         retry = true;
                     } else {
                         throw e;
                     }
-                } finally {
-                    tearDownEndpoint(endpoint, worker, serverTimeout);
-                    scope.close();
                 }
                 if (retry) {
                     resetWorker();
@@ -340,7 +365,6 @@ public class DPwRClient {
                 throw new NetworkException("Connection lost");
             }
         }
-
         return result;
     }
 
@@ -352,11 +376,11 @@ public class DPwRClient {
             requestNewTagID(scope);
 
             final long[] requests = new long[4];
-            requests[0] = prepareToSendStatusString(tagID, "PUT", endpoint, scope);
-            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "PUT", currentEndpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, currentEndpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
-            requests[3] = prepareToSendInteger(tagID, entryBytes.length, endpoint, scope);
+            requests[3] = prepareToSendInteger(tagID, entryBytes.length, currentEndpoint, scope);
 
             awaitRequests(requests, worker, serverTimeout);
 
@@ -364,8 +388,8 @@ public class DPwRClient {
 
             switch (statusCode) {
                 case "200" -> {
-                    sendEntryPerRDMA(tagID, entryBytes, worker, endpoint, serverTimeout, scope);
-                    sendStatusCode(tagID, "201", endpoint, worker, serverTimeout, scope);
+                    sendEntryPerRDMA(tagID, entryBytes, worker, currentEndpoint, serverTimeout, scope);
+                    sendStatusCode(tagID, "201", currentEndpoint, worker, serverTimeout, scope);
                     final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
                     switch (resultStatusCode) {
                         case "202" -> log.info("Success");
@@ -382,7 +406,7 @@ public class DPwRClient {
     }
 
     private void requestNewTagID(final ResourceScope scope) throws TimeoutException {
-        streamTagID(tagID, endpoint, worker, serverTimeout, scope);
+        streamTagID(tagID, currentEndpoint, worker, serverTimeout, scope);
         this.tagID = receiveTagIDAsStream(scope);
     }
 
@@ -393,8 +417,8 @@ public class DPwRClient {
             requestNewTagID(scope);
 
             final long[] requests = new long[3];
-            requests[0] = prepareToSendStatusString(tagID, "GET", endpoint, scope);
-            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "GET", currentEndpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, currentEndpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
@@ -403,8 +427,8 @@ public class DPwRClient {
             final String statusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
             switch (statusCode) {
                 case "211" -> {
-                    value = receiveValuePerRDMA(tagID, endpoint, worker, serverTimeout, scope);
-                    sendStatusCode(tagID, "212", endpoint, worker, serverTimeout, scope);
+                    value = receiveValuePerRDMA(tagID, currentEndpoint, worker, serverTimeout, scope);
+                    sendStatusCode(tagID, "212", currentEndpoint, worker, serverTimeout, scope);
                 }
                 case "411" ->
                         throw new KeyNotFoundException("An object with the key \"" + key + "\" was not found by the server.");
@@ -429,8 +453,8 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
-            requests[0] = prepareToSendStatusString(tagID, "DEL", endpoint, scope);
-            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "DEL", currentEndpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, currentEndpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
@@ -455,8 +479,8 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
-            requests[0] = prepareToSendStatusString(tagID, "CNT", endpoint, scope);
-            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "CNT", currentEndpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, currentEndpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
@@ -482,8 +506,8 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
-            requests[0] = prepareToSendStatusString(tagID, "HSH", endpoint, scope);
-            final long[] requests_tmp = prepareToSendKey(tagID, key, endpoint, scope);
+            requests[0] = prepareToSendStatusString(tagID, "HSH", currentEndpoint, scope);
+            final long[] requests_tmp = prepareToSendKey(tagID, key, currentEndpoint, scope);
             requests[1] = requests_tmp[0];
             requests[2] = requests_tmp[1];
 
@@ -516,13 +540,13 @@ public class DPwRClient {
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
 
-            final long request = prepareToSendStatusString(tagID, "BYE", endpoint, scope);
+            final long request = prepareToSendStatusString(tagID, "BYE", currentEndpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
             try {
-                final long request_2 = endpoint.closeNonBlocking();
+                final long request_2 = currentEndpoint.closeNonBlocking();
                 awaitRequests(new long[]{request_2}, worker, 1000);
             } catch (final TimeoutException e) {
-                endpoint.close();
+                currentEndpoint.close();
             }
         }
         log.info("BYE completed");
@@ -533,8 +557,6 @@ public class DPwRClient {
         final ArrayList<byte[]> result;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
-
-            final int tagID = receiveTagID(worker, serverTimeout, scope);
 
             final long request = prepareToSendStatusString(tagID, "LST", endpoint, scope);
             awaitRequests(new long[]{request}, worker, serverTimeout);
