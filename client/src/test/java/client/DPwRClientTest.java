@@ -199,7 +199,7 @@ public class DPwRClientTest {
             assertDoesNotThrow(() -> client.put(key, value, putAttempts));
             assertDoesNotThrow(() -> {
                 final byte[] response = client.hash(key, getAttempts);
-                System.out.println(response);
+                System.out.println(Arrays.toString(response));
                 assertArrayEquals(expected, response);
             });
         }
@@ -536,19 +536,19 @@ public class DPwRClientTest {
         @Test
         @Order(1)
         void testCanPutMultipleTimes() {
-            assertDoesNotThrow(() -> canPutMultipleTimes(1000, 0, client));
+            assertDoesNotThrow(() -> canPutMultipleTimes(10000, 0, client));
         }
 
         @Test
         @Order(2)
         void testCanGetMultipleTimes() {
-            assertDoesNotThrow(() -> canGetMultipleTimes(1000, 0, client));
+            assertDoesNotThrow(() -> canGetMultipleTimes(10000, 0, client));
         }
 
         @Test
         @Order(3)
         void testCanDeleteMultipleTimes() {
-            assertDoesNotThrow(() -> canDeleteMultipleTimes(1000, 0, client));
+            assertDoesNotThrow(() -> canDeleteMultipleTimes(10000, 0, client));
         }
     }
 
@@ -590,7 +590,7 @@ public class DPwRClientTest {
         }
 
         @Test
-        @Timeout(60)
+        @Timeout(90)
         void testThreeClientsMultipleKeyValues() {
             final CountDownLatch latch = new CountDownLatch(3);
 
@@ -662,7 +662,7 @@ public class DPwRClientTest {
         }
 
         @Test
-        @Timeout(60)
+        @Timeout(120)
         void testStress() {
             final CountDownLatch latch = new CountDownLatch(4);
 
