@@ -15,9 +15,9 @@ public class Application implements Callable<Integer> {
     @Option(names = {"-c", "--connect"}, description = "The address of the server this client should connect to. Default is 127.0.0.1:2998")
     private final InetSocketAddress serverAddress = new InetSocketAddress("127.0.0.1", 2998);
     @Option(names = {"-t", "--server-timeout"}, description = "The timeout for server operations in milliseconds. Default is 500MS")
-    private int serverTimeout = 500;
+    private final int serverTimeout = 500;
     @Option(names = {"-v", "--verbose"}, description = "Whether or not info logs should be displayed. Default is false")
-    private boolean verbose = false;
+    private final boolean verbose = false;
 
     public static void main(final String[] args) {
         final int exitCode = new CommandLine(new Application())
