@@ -49,7 +49,6 @@ import static utils.CommunicationUtils.receiveCount;
 import static utils.CommunicationUtils.receiveHash;
 import static utils.CommunicationUtils.receiveObjectPerRDMA;
 import static utils.CommunicationUtils.receiveStatusCode;
-import static utils.CommunicationUtils.receiveTagID;
 import static utils.CommunicationUtils.receiveValuePerRDMA;
 import static utils.CommunicationUtils.sendEntryPerRDMA;
 import static utils.CommunicationUtils.sendStatusCode;
@@ -370,6 +369,7 @@ public class DPwRClient {
 
     public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException, IOException {
         log.info("[{}] Starting PUT operation", tagID);
+        log.info("[{}] Key {}", tagID, key);
         final byte[] entryBytes = PlasmaUtils.serializePlasmaEntry(new PlasmaEntry(key, value, new byte[20]));
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
@@ -392,8 +392,8 @@ public class DPwRClient {
                     sendStatusCode(tagID, "201", currentEndpoint, worker, serverTimeout, scope);
                     final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
                     switch (resultStatusCode) {
-                        case "202" -> log.info("Success");
-                        case "401", "402" -> throw new TimeoutException("Something went wrong");
+                        case "202" -> log.info("[{}] Success", tagID);
+                        case "401", "402", "403", "404", "405" -> throw new TimeoutException("Something went wrong");
                         default -> throw new TimeoutException("Wrong status code: " + statusCode);
                     }
                 }
@@ -411,7 +411,8 @@ public class DPwRClient {
     }
 
     private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
-        log.info("Starting GET operation");
+        log.info("[{}] Starting GET operation", tagID);
+        log.info("[{}] Key {}", tagID, key);
         final byte[] value;
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
@@ -437,12 +438,12 @@ public class DPwRClient {
 
             final String resultStatusCode = receiveStatusCode(tagID, worker, serverTimeout, scope);
             switch (resultStatusCode) {
-                case "213" -> log.info("Success");
+                case "213" -> log.info("[{}] Success", tagID);
                 case "412" -> throw new TimeoutException("Something went wrong");
                 default -> throw new TimeoutException("Wrong status code: " + statusCode);
             }
         }
-        log.info("Get completed");
+        log.info("[{}] Get completed", tagID);
         return value;
     }
 

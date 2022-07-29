@@ -35,11 +35,8 @@ public class CommunicationUtils {
         log.info("[{}] Prepare to send data", tagID);
         final int dataSize = data.length;
 
-        log.info(Arrays.toString(data));
         final MemorySegment source = MemorySegment.ofArray(data);
-        log.info(String.valueOf(source));
         final MemorySegment buffer = MemorySegment.allocateNative(dataSize, scope);
-        log.info(String.valueOf(buffer));
         buffer.copyFrom(source);
 
         return endpoint.sendTagged(buffer, Tag.of(tagID));
