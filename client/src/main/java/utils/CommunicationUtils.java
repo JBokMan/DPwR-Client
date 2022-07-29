@@ -1,6 +1,7 @@
 package utils;
 
 import de.hhu.bsinfo.infinileap.binding.ControlException;
+import de.hhu.bsinfo.infinileap.binding.DataType;
 import de.hhu.bsinfo.infinileap.binding.Endpoint;
 import de.hhu.bsinfo.infinileap.binding.MemoryDescriptor;
 import de.hhu.bsinfo.infinileap.binding.RemoteKey;
@@ -8,6 +9,7 @@ import de.hhu.bsinfo.infinileap.binding.RequestParameters;
 import de.hhu.bsinfo.infinileap.binding.Tag;
 import de.hhu.bsinfo.infinileap.binding.Worker;
 import de.hhu.bsinfo.infinileap.primitive.NativeInteger;
+import de.hhu.bsinfo.infinileap.primitive.NativeLong;
 import de.hhu.bsinfo.infinileap.util.Requests;
 import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
@@ -16,7 +18,6 @@ import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
 import org.apache.commons.lang3.SerializationException;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -30,6 +31,15 @@ import static org.apache.commons.lang3.SerializationUtils.deserialize;
 
 @Slf4j
 public class CommunicationUtils {
+
+    private final static RequestParameters receiveStreamRequestParams = new RequestParameters()
+            .setDataType(DataType.CONTIGUOUS_32_BIT)
+            .setFlags(RequestParameters.Flag.STREAM_WAIT);
+
+    private final static RequestParameters sendStreamRequestParams = new RequestParameters()
+            .setDataType(DataType.CONTIGUOUS_32_BIT);
+
+    private final static NativeLong nativeLengthLong = new NativeLong();
 
     private static Long prepareToSendData(final int tagID, final byte[] data, final Endpoint endpoint, final ResourceScope scope) {
         log.info("[{}] Prepare to send data", tagID);
@@ -61,7 +71,7 @@ public class CommunicationUtils {
         return requests;
     }
 
-    private static void awaitRequest(final long request, final Worker worker, final int timeoutMs) throws TimeoutException, InterruptedException {
+    private static void awaitRequest(final long request, final Worker worker, final int timeoutMs) throws TimeoutException {
         final long timeout = 2_000L * timeoutMs;
         int counter = 0;
         Requests.State requestState = state(request);
@@ -135,14 +145,6 @@ public class CommunicationUtils {
         return number;
     }
 
-    public static int receiveTagID(final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
-        return receiveInteger(0, worker, timeoutMs, scope);
-    }
-
-    public static int receiveTagID(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
-        return receiveInteger(tagID, worker, timeoutMs, scope);
-    }
-
     public static int receiveCount(final int tagID, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException {
         return receiveInteger(tagID, worker, timeoutMs, scope);
     }
@@ -184,10 +186,10 @@ public class CommunicationUtils {
         return descriptor;
     }
 
-    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) throws SerializationException, IOException, ClassNotFoundException {
+    private static PlasmaEntry getPlasmaEntryFromBuffer(final ByteBuffer objectBuffer) throws SerializationException {
         final byte[] data = new byte[objectBuffer.remaining()];
         objectBuffer.get(data);
-        return PlasmaUtils.deserializePlasmaEntry(data);
+        return deserialize(data);
     }
 
     private static MemorySegment prepareBufferAndGetBytes(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws TimeoutException, ControlException {
@@ -202,7 +204,7 @@ public class CommunicationUtils {
     }
 
     @SuppressWarnings("PMD.DataflowAnomalyAnalysis")
-    public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws ControlException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
+    public static byte[] receiveValuePerRDMA(final int tagID, final Endpoint endpoint, final Worker worker, final int timeoutMs, final ResourceScope scope) throws ControlException, TimeoutException, SerializationException {
         log.info("Receiving Remote Key");
         final MemorySegment targetBuffer = prepareBufferAndGetBytes(tagID, endpoint, worker, timeoutMs, scope);
 
@@ -219,26 +221,21 @@ public class CommunicationUtils {
         return targetBuffer.toArray(ValueLayout.JAVA_BYTE);
     }
 
-    public static void tearDownEndpoint(final Endpoint endpoint, final Worker worker, final int timeoutMs) {
-        try {
-            final long[] requests = new long[2];
-            requests[0] = endpoint.flush();
-            requests[1] = endpoint.closeNonBlocking();
-            awaitRequests(requests, worker, timeoutMs);
-        } catch (final TimeoutException e) {
-            log.warn(e.getMessage());
-        }
-    }
-
     public static void streamTagID(final int tagID, final Endpoint endpoint, final Worker worker, final int timeout, final ResourceScope scope) throws TimeoutException {
         // Allocate a buffer and write numbers into it
-        final var buffer = MemorySegment.allocateNative(Integer.BYTES, scope);
-        final var first = NativeInteger.map(buffer, 0L);
-        first.set(tagID);
-        // Send the buffer to the server
-        log.info("Sending first chunk of stream");
-        final var request = endpoint.sendStream(first, new RequestParameters()
-                .setDataType(first.dataType()));
-        awaitRequests(new long[]{request}, worker, timeout);
+        final NativeInteger integerToSend = new NativeInteger(tagID, scope);
+        integerToSend.set(tagID);
+        // Send the buffer to the client
+        final long[] request = new long[]{endpoint.sendStream(integerToSend, sendStreamRequestParams)};
+        awaitRequests(request, worker, timeout);
+    }
+
+    public static int receiveTagIDAsStream(final Endpoint endpoint, final Worker worker, final int timeOut, final ResourceScope scope) throws TimeoutException {
+        final MemorySegment buffer = MemorySegment.allocateNative(Integer.BYTES, scope);
+        final long[] request = new long[]{endpoint.receiveStream(buffer, 1, nativeLengthLong, receiveStreamRequestParams)};
+        awaitRequests(request, worker, timeOut);
+
+        final var value = NativeInteger.map(buffer, 0L);
+        return value.get();
     }
 }

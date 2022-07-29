@@ -3,21 +3,16 @@ package client;
 import de.hhu.bsinfo.infinileap.binding.Context;
 import de.hhu.bsinfo.infinileap.binding.ContextParameters;
 import de.hhu.bsinfo.infinileap.binding.ControlException;
-import de.hhu.bsinfo.infinileap.binding.DataType;
 import de.hhu.bsinfo.infinileap.binding.Endpoint;
 import de.hhu.bsinfo.infinileap.binding.EndpointParameters;
 import de.hhu.bsinfo.infinileap.binding.ErrorHandler;
 import de.hhu.bsinfo.infinileap.binding.NativeLogger;
-import de.hhu.bsinfo.infinileap.binding.RequestParameters;
 import de.hhu.bsinfo.infinileap.binding.ThreadMode;
 import de.hhu.bsinfo.infinileap.binding.Worker;
 import de.hhu.bsinfo.infinileap.binding.WorkerParameters;
-import de.hhu.bsinfo.infinileap.primitive.NativeInteger;
-import de.hhu.bsinfo.infinileap.primitive.NativeLong;
 import exceptions.DuplicateKeyException;
 import exceptions.KeyNotFoundException;
 import exceptions.NetworkException;
-import jdk.incubator.foreign.MemorySegment;
 import jdk.incubator.foreign.ResourceScope;
 import lombok.extern.slf4j.Slf4j;
 import model.PlasmaEntry;
@@ -27,7 +22,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import utils.DPwRErrorHandler;
-import utils.PlasmaUtils;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -38,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeoutException;
 
+import static org.apache.commons.lang3.SerializationUtils.serialize;
 import static org.apache.logging.log4j.Level.INFO;
 import static org.apache.logging.log4j.Level.OFF;
 import static utils.CommunicationUtils.awaitRequests;
@@ -49,6 +44,7 @@ import static utils.CommunicationUtils.receiveCount;
 import static utils.CommunicationUtils.receiveHash;
 import static utils.CommunicationUtils.receiveObjectPerRDMA;
 import static utils.CommunicationUtils.receiveStatusCode;
+import static utils.CommunicationUtils.receiveTagIDAsStream;
 import static utils.CommunicationUtils.receiveValuePerRDMA;
 import static utils.CommunicationUtils.sendEntryPerRDMA;
 import static utils.CommunicationUtils.sendStatusCode;
@@ -73,7 +69,7 @@ public class DPwRClient {
 
     }
 
-    public DPwRClient(final InetSocketAddress serverAddress, final int serverTimeout, final boolean verbose) throws NetworkException {
+    public DPwRClient(final InetSocketAddress serverAddress, final int serverTimeout, final boolean verbose) {
         this.serverAddress = serverAddress;
         this.serverTimeout = serverTimeout;
         this.verbose = verbose;
@@ -139,7 +135,7 @@ public class DPwRClient {
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             this.currentEndpoint = this.worker.createEndpoint(endpointParameters);
-            this.tagID = receiveTagIDAsStream(scope);
+            this.tagID = receiveTagIDAsStream(this.currentEndpoint, this.worker, serverTimeout, scope);
             this.endpointMap.put(serverID, this.currentEndpoint);
         } catch (final ControlException | TimeoutException e) {
             log.error(e.getMessage());
@@ -155,21 +151,6 @@ public class DPwRClient {
     private Endpoint establishConnection(final int serverID, final int attempts) throws ControlException, TimeoutException {
         final InetSocketAddress serverAddress = this.serverMap.get(serverID);
         return establishConnection(serverAddress, serverID, attempts);
-    }
-
-    private int receiveTagIDAsStream(final ResourceScope scope) throws TimeoutException {
-        final var buffer = MemorySegment.allocateNative(Integer.BYTES, scope);
-        final var length = new NativeLong();
-
-        log.info("Receiving stream");
-        final var request = currentEndpoint.receiveStream(buffer, 1, length, new RequestParameters()
-                .setDataType(DataType.CONTIGUOUS_32_BIT)
-                .setFlags(RequestParameters.Flag.STREAM_WAIT));
-
-        awaitRequests(new long[]{request}, worker, serverTimeout);
-
-        final var first = NativeInteger.map(buffer, 0L);
-        return first.get();
     }
 
     private void setLogLevel(final org.apache.logging.log4j.Level level) {
@@ -242,20 +223,6 @@ public class DPwRClient {
             processRequest("DEL", key, new byte[0], maxAttempts);
         } catch (final DuplicateKeyException | ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
-        }
-    }
-
-    public void closeConnection(final int serverID) {
-        this.currentEndpoint = this.endpointMap.get(serverID);
-        if (this.currentEndpoint == null) {
-            return;
-        }
-        try {
-            processRequest("BYE", "", new byte[0], 1);
-        } catch (final DuplicateKeyException | ControlException | TimeoutException | KeyNotFoundException e) {
-            log.warn(e.getMessage());
-        } finally {
-            this.endpointMap.put(serverID, null);
         }
     }
 
@@ -339,7 +306,7 @@ public class DPwRClient {
         return endpoint;
     }
 
-    public List<byte[]> processListRequest(int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException, NetworkException {
+    public List<byte[]> processListRequest(int maxAttempts) throws ControlException, TimeoutException, NetworkException {
         final ArrayList<byte[]> result = new ArrayList<>();
         for (final int serverID : this.serverMap.keySet()) {
             boolean retry = true;
@@ -367,10 +334,10 @@ public class DPwRClient {
         return result;
     }
 
-    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException, IOException {
+    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
         log.info("[{}] Starting PUT operation", tagID);
         log.info("[{}] Key {}", tagID, key);
-        final byte[] entryBytes = PlasmaUtils.serializePlasmaEntry(new PlasmaEntry(key, value, new byte[20]));
+        final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             requestNewTagID(scope);
@@ -407,10 +374,10 @@ public class DPwRClient {
 
     private void requestNewTagID(final ResourceScope scope) throws TimeoutException {
         streamTagID(tagID, currentEndpoint, worker, serverTimeout, scope);
-        this.tagID = receiveTagIDAsStream(scope);
+        this.tagID = receiveTagIDAsStream(this.currentEndpoint, this.worker, serverTimeout, scope);
     }
 
-    private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException, IOException, ClassNotFoundException {
+    private byte[] getOperation(final String key) throws ControlException, KeyNotFoundException, TimeoutException, SerializationException {
         log.info("[{}] Starting GET operation", tagID);
         log.info("[{}] Key {}", tagID, key);
         final byte[] value;
