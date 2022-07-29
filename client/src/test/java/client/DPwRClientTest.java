@@ -39,11 +39,11 @@ public class DPwRClientTest {
     final Integer putAttempts = 5;
     final Integer getAttempts = 5;
     DPwRClient client;
-    Integer delAttempts = 5;
-    boolean verbose = true;
+    final Integer delAttempts = 5;
+    final boolean verbose = true;
 
     @BeforeAll
-    void setup() throws NetworkException {
+    void setup() {
         client = new DPwRClient(serverAddress, timeoutMs, verbose);
     }
 
