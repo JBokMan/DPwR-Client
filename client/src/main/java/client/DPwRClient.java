@@ -23,7 +23,6 @@ import org.apache.logging.log4j.core.LoggerContext;
 import org.apache.logging.log4j.core.config.LoggerConfig;
 import utils.DPwRErrorHandler;
 
-import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -122,6 +121,8 @@ public class DPwRClient {
         } catch (final ControlException | TimeoutException e) {
             throw new NetworkException(e.getMessage());
         }
+        this.serverMap.put(0, serverAddress);
+        this.endpointMap.put(0, this.currentEndpoint);
         getNetworkInformation(maxAttempts);
     }
 
@@ -135,9 +136,8 @@ public class DPwRClient {
 
         try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
             this.currentEndpoint = this.worker.createEndpoint(endpointParameters);
-            this.tagID = receiveTagIDAsStream(this.currentEndpoint, this.worker, serverTimeout, scope);
             this.endpointMap.put(serverID, this.currentEndpoint);
-        } catch (final ControlException | TimeoutException e) {
+        } catch (final ControlException e) {
             log.error(e.getMessage());
             if (attempts > 0) {
                 return establishConnection(serverAddress, serverID, attempts - 1);
@@ -162,18 +162,10 @@ public class DPwRClient {
     }
 
     private void getNetworkInformation(final int maxAttempts) throws NetworkException {
-        boolean retry = false;
         try {
-            infOperation();
-        } catch (final TimeoutException e) {
-            if (maxAttempts > 1) {
-                retry = true;
-            } else {
-                throw new NetworkException(e.getMessage());
-            }
-        }
-        if (retry) {
-            getNetworkInformation(maxAttempts - 1);
+            processRequest("INF", "", new byte[0], maxAttempts);
+        } catch (final DuplicateKeyException | ControlException | TimeoutException | KeyNotFoundException e) {
+            throw new NetworkException(e.getMessage());
         }
     }
 
@@ -256,9 +248,7 @@ public class DPwRClient {
     }
 
     public List<byte[]> list(final int maxAttempts) throws ControlException, TimeoutException, NetworkException {
-        List<byte[]> result = List.of(new byte[0]);
-        result = processListRequest(maxAttempts);
-        return result;
+        return processListRequest(maxAttempts);
     }
 
     public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
@@ -276,6 +266,7 @@ public class DPwRClient {
                 case "CNT" -> result = containsOperation(key);
                 case "HSH" -> result = hashOperation(key);
                 case "BYE" -> closeConnectionOperation();
+                case "INF" -> infOperation();
             }
         } catch (final TimeoutException | SerializationException e) {
             log.warn(e.getMessage());
@@ -303,24 +294,23 @@ public class DPwRClient {
     }
 
     public List<byte[]> processListRequest(int maxAttempts) throws ControlException, TimeoutException, NetworkException {
+        closeConnectionOperation();
         final ArrayList<byte[]> result = new ArrayList<>();
         for (final int serverID : this.serverMap.keySet()) {
+            log.info("Contacting server with ID {}", serverID);
             boolean retry = true;
             while (retry && maxAttempts >= 1) {
                 retry = false;
                 this.currentEndpoint = getOrCreateEndpoint(serverID);
                 try {
                     result.addAll(listOperation(currentEndpoint));
+                    closeConnectionOperation();
                 } catch (final TimeoutException e) {
                     if (maxAttempts > 1) {
                         retry = true;
-                    } else {
-                        throw e;
+                        this.endpointMap.put(serverID, null);
+                        maxAttempts = maxAttempts - 1;
                     }
-                }
-                if (retry) {
-                    resetWorker();
-                    maxAttempts = maxAttempts - 1;
                 }
             }
             if (maxAttempts == 0) {
@@ -501,16 +491,19 @@ public class DPwRClient {
 
     private void closeConnectionOperation() throws TimeoutException {
         log.info("Starting BYE operation");
-        try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
-            requestNewTagID(scope);
-
-            final long request = prepareToSendStatusString(tagID, "BYE", currentEndpoint, scope);
-            awaitRequests(new long[]{request}, worker, serverTimeout);
-            try {
-                final long request_2 = currentEndpoint.closeNonBlocking();
-                awaitRequests(new long[]{request_2}, worker, 1000);
-            } catch (final TimeoutException e) {
-                currentEndpoint.close();
+        for (final int id : this.endpointMap.keySet()) {
+            this.currentEndpoint = this.endpointMap.get(id);
+            if (this.currentEndpoint != null) {
+                try (final ResourceScope scope = ResourceScope.newConfinedScope()) {
+                    requestNewTagID(scope);
+                    final long request = prepareToSendStatusString(tagID, "BYE", this.currentEndpoint, scope);
+                    awaitRequests(new long[]{request}, worker, serverTimeout);
+                } catch (final Exception e) {
+                    log.warn(e.getMessage());
+                    this.currentEndpoint.close();
+                } finally {
+                    this.endpointMap.put(id, null);
+                }
             }
         }
         log.info("BYE completed");
