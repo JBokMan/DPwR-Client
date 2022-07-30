@@ -257,11 +257,7 @@ public class DPwRClient {
 
     public List<byte[]> list(final int maxAttempts) throws ControlException, TimeoutException, NetworkException {
         List<byte[]> result = List.of(new byte[0]);
-        try {
-            result = processListRequest(maxAttempts);
-        } catch (final DuplicateKeyException | KeyNotFoundException e) {
-            log.error(e.getMessage());
-        }
+        result = processListRequest(maxAttempts);
         return result;
     }
 
@@ -281,7 +277,7 @@ public class DPwRClient {
                 case "HSH" -> result = hashOperation(key);
                 case "BYE" -> closeConnectionOperation();
             }
-        } catch (final TimeoutException | SerializationException | IOException | ClassNotFoundException e) {
+        } catch (final TimeoutException | SerializationException e) {
             log.warn(e.getMessage());
             if (maxAttempts > 1) {
                 retry = true;
