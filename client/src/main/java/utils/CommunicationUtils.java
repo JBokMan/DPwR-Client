@@ -210,7 +210,6 @@ public class CommunicationUtils {
 
         final ByteBuffer objectBuffer = targetBuffer.asByteBuffer();
         final PlasmaEntry entry = getPlasmaEntryFromBuffer(objectBuffer);
-        log.info("Read \"{}\" from remote buffer", entry);
 
         return entry.value;
     }
