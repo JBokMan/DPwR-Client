@@ -556,7 +556,7 @@ public class DPwRClientTest {
     @Nested
     class Concurrency {
         @Test
-        @Timeout(60)
+        @Timeout(120)
         void testTwoClientsMultipleKeyValues() {
             final CountDownLatch latch = new CountDownLatch(2);
 
@@ -590,7 +590,7 @@ public class DPwRClientTest {
         }
 
         @Test
-        @Timeout(90)
+        @Timeout(120)
         void testThreeClientsMultipleKeyValues() {
             final CountDownLatch latch = new CountDownLatch(3);
 
@@ -645,6 +645,12 @@ public class DPwRClientTest {
     @Order(4)
     @Nested
     class StressTests {
+
+        @BeforeEach
+        public void setup() throws NetworkException {
+            client.initialize();
+        }
+
         @AfterEach
         public void cleanUp() {
             try {
