@@ -251,7 +251,7 @@ public class DPwRClient {
         return processListRequest(maxAttempts);
     }
 
-    public byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
+    private byte[] processRequest(final String operationName, final String key, final byte[] value, final int maxAttempts) throws KeyNotFoundException, ControlException, TimeoutException, DuplicateKeyException {
         final int responsibleServerID = getResponsibleServerID(key, this.serverMap.size());
         this.currentEndpoint = getOrCreateEndpoint(responsibleServerID);
 
@@ -320,7 +320,7 @@ public class DPwRClient {
         return result;
     }
 
-    public void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
+    private void putOperation(final String key, final byte[] value) throws SerializationException, ControlException, DuplicateKeyException, TimeoutException {
         log.info("[{}] Starting PUT operation", tagID);
         log.info("[{}] Key {}", tagID, key);
         final byte[] entryBytes = serialize(new PlasmaEntry(key, value, new byte[20]));
